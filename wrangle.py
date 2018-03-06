@@ -6,7 +6,7 @@ import ubelt as ub
 from coco_wrangler import CocoDataset, StratifiedGroupKFold
 
 
-def simplify_categories():
+def get_coarse_mapping():
     simple_maps = [
         # habcam
         {
@@ -276,16 +276,17 @@ def simplify_categories():
                 if val in mapping:
                     assert key == mapping[val]
                 mapping[val] = key
+    return mapping
 
-    newfreq = {}
-    for k, v in self.category_annotation_frequency().items():
-        key = mapping[k]
-        newfreq[key] = newfreq.get(key, 0) + v
+    # newfreq = {}
+    # for k, v in self.category_annotation_frequency().items():
+    #     key = mapping[k]
+    #     newfreq[key] = newfreq.get(key, 0) + v
 
-    newfreq = ub.odict(sorted(newfreq.items(),
-                              key=lambda kv: kv[1]))
+    # newfreq = ub.odict(sorted(newfreq.items(),
+    #                           key=lambda kv: kv[1]))
 
-    print(ub.repr2(newfreq))
+    # print(ub.repr2(newfreq))
 
 
 def fix_full_truthfiles():
@@ -331,9 +332,11 @@ def make_baseline_truthfiles():
         dset._run_fixes()
         dset._build_index()
         dsets.append(dset)
-        print(ub.repr2([d['name'] for d in dset.cats.values()]))
-        print(dset.img_root)
-        print(ub.repr2(dset.basic_stats()))
+
+        # print(ub.repr2([d['name'] for d in dset.cats.values()]))
+        # print(dset.img_root)
+        # print(ub.repr2(dset.basic_stats()))
+        # print(ub.repr2(dset.category_annotation_frequency()))
 
     print('Merging')
     self = CocoDataset.union(*dsets)
@@ -353,8 +356,13 @@ def make_baseline_truthfiles():
 
         self._remove_empty_images()
 
-    print(ub.repr2(self.basic_stats()))
     print(ub.repr2(self.category_annotation_frequency()))
+    print(sum(list(self.category_annotation_frequency().values())))
+    self.coarsen_categories(get_coarse_mapping())
+    print(ub.repr2(self.category_annotation_frequency()))
+    print(sum(list(self.category_annotation_frequency().values())))
+
+    print(ub.repr2(self.basic_stats()))
 
     if False:
         # aid = list(self.anns.values())[0]['id']

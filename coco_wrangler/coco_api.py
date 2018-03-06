@@ -167,6 +167,17 @@ class CocoDataset(ub.NiceRepr):
                 warnings.warn('Annotation {} in {} references '
                               'unknown category_id'.format(ann, self))
 
+        # Fix one-to-zero cases
+        for cid in cats.keys():
+            if cid not in cid_to_aids:
+                cid_to_aids[cid] = set()
+            if cid not in cid_to_gids:
+                cid_to_gids[cid] = set()
+
+        for gid in cats.keys():
+            if gid not in gid_to_aids:
+                gid_to_aids[gid] = set()
+
         # create class members
         self.anns = anns
         self.imgs = imgs
@@ -403,6 +414,7 @@ class CocoDataset(ub.NiceRepr):
             >>> hist = self.category_annotation_frequency()
             >>> print(ub.repr2(hist))
             {
+                'astroturf': 0,
                 'astronomer': 1,
                 'rocket': 1,
                 'astronaut': 1,
@@ -428,7 +440,7 @@ class CocoDataset(ub.NiceRepr):
             {
                 'n_anns': 11,
                 'n_imgs': 3,
-                'n_cats': 6,
+                'n_cats': 7,
             }
         """
         return ub.odict([
@@ -436,6 +448,40 @@ class CocoDataset(ub.NiceRepr):
             ('n_imgs', len(self.dataset['images'])),
             ('n_cats', len(self.dataset['categories'])),
         ])
+
+    def coarsen_categories(self, mapping):
+        """
+        Create a coarser categorization
+        """
+        new_cats = []
+        old_cats = self.dataset['categories']
+        new_name_to_cat = {}
+        old_to_new_id = {}
+        for old_cat in old_cats:
+            new_name = mapping[old_cat['name']]
+            if new_name in new_name_to_cat:
+                new_cat = new_name_to_cat[new_name]
+            else:
+                new_cat = ub.odict([
+                    ('id', len(new_cats) + 1),
+                    ('name', new_name),
+                ])
+                new_name_to_cat[new_name] = new_cat
+                new_cats.append(new_cat)
+
+            old_to_new_id[old_cat['id']] = new_cat['id']
+            old_cat['supercategory'] = new_name
+
+        self.dataset['fine_categories'] = old_cats
+        self.dataset['categories'] = new_cats
+
+        for ann in self.dataset['annotations']:
+            old_id = ann['category_id']
+            new_id = old_to_new_id[old_id]
+            ann['category_id'] = new_id
+            ann['fine_category_id'] = old_id
+
+        self._build_index()
 
     # --- The following functions were only defined for debug purposes ---
 
@@ -448,9 +494,11 @@ class CocoDataset(ub.NiceRepr):
 
             if 'roi_category' in ann:
                 cid = ann['roi_category']
-                if 'category_id' in ann:
-                    assert ann['category_id'] == cid
-                ann['category_id'] = cid
+                if 'category_id' not in ann:
+                    ann['category_id'] = cid
+                else:
+                    ann.pop('roi_category')
+                    # assert ann['category_id'] == cid, ub.repr2(ann)
 
             if 'roi_shape' not in ann:
                 isect = set(ann).intersection({'bbox', 'keypoints', 'line'})
@@ -621,6 +669,7 @@ def demo_coco_data():
             {'id': 4, 'name': 'mouth', 'supercategory': 'human'},
             {'id': 5, 'name': 'star', 'supercategory': 'object'},
             {'id': 6, 'name': 'astronomer', 'supercategory': 'human'},
+            {'id': 7, 'name': 'astroturf', 'supercategory': 'object'},
         ],
         'images': [
             {'id': 1, 'file_name': gpath1},
