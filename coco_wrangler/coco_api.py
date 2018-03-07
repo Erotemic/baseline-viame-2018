@@ -186,6 +186,8 @@ class CocoDataset(ub.NiceRepr):
         self.cid_to_gids = ub.map_vals(sorted, cid_to_gids)
         self.cid_to_aids = ub.map_vals(sorted, cid_to_aids)
 
+        self.name_to_cat = {cat['name']: cid for cid, cat in self.cats.items()}
+
     @classmethod
     def union(cls, *others):
         """

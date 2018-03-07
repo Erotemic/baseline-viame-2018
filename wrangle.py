@@ -92,7 +92,7 @@ def get_coarse_mapping():
         {
             'round_fish': [
                 'pristipomoides filamentosus',  # Perciformes Lutjanidae Pristipomoides filamentosus (crimson jobfish)
-                'pristipomoides sieboldii',  # lavandar jobfish
+                'pristipomoides sieboldii',     # Perciformes Lutjanidae pristipomoides sieboldii - (lavandar jobfish)
             ]
         },
 
@@ -109,14 +109,14 @@ def get_coarse_mapping():
 
             'round_fish': [
                 'pristipomoides filamentosus',  # crimson jobfish (round)
-                'pristipomoides sieboldii',  # lavandar jobfish (round)
-                'merluccius_productus',  # north pacific hake (round)
-                'lycodes_diapterus',  # black eelpout
+                'pristipomoides sieboldii',     # lavandar jobfish (round)
+                'merluccius_productus',         # Gadiformes Merlucciidae Merluccius productus - north pacific hake (round)
+                'lycodes_diapterus',            # Perciformes Zoarcidae Lycodes diapterus - black eelpout
             ],
 
             'rock_fish': [
-                'sebastes_2species',  # Scorpaeniformes
-                'sebastolobus_altivelis',  # Scorpaeniformes
+                'sebastes_2species',       # Scorpaeniformes Sebastidae
+                'sebastolobus_altivelis',  # Scorpaeniformes Sebastidae Sebastolobus altivelis - longspine thornyhead
             ],
 
             'flat_fish': [
@@ -145,7 +145,7 @@ def get_coarse_mapping():
                 'unknown sculpin',  # Scorpaeniformes Cottoidei Cottoidea
                 'threadfin sculpin',
 
-                'poacher/cottid',  # Scorpaeniformes Cottoidea Agonidae
+                'poacher/cottid',   # Scorpaeniformes Cottoidea Agonidae
                 'unknown poacher',
             ],
 
@@ -153,7 +153,7 @@ def get_coarse_mapping():
                 'unknown roundfish',
                 'spotted ratfish',  # Chimaeriformes Chimaeridae Hydrolagus colliei
 
-                'unknown eelpout',  # Perciformes Zoarcidae Lycodes
+                'unknown eelpout',     # Perciformes Zoarcidae Lycodes
                 'blackbelly eelpout',  # Perciformes Zoarcidae Lycodes pacificus
             ],
 
@@ -172,42 +172,41 @@ def get_coarse_mapping():
         # afsc_seq0
         {
             'round_fish': [
-                'Searcher',  # Perciformes Bathymasteridae Bathymaster signatus
-                'Herring',  # Clupeiformes Clupeidea Clupea harengus
-                'Pollock',  # Gadiformes Gadidae Pollachius
+                'Herring',   # Clupeiformes Clupeidea Clupea harengus
+                'Pollock',   # Gadiformes Gadidae Pollachius
 
                 'Smelt Unid.',  # Osmeriformes Osmeridae
 
-                'Lingcod',
-                'Pacific Cod',  # Gadiformes Gadidae Gadus macrocephalus
-                'Gadoid Unid.',
-
-                'Prickleback',  # Perciformes Zoarcoidei Stichaeidae - eel-like
-                'Stichaeidae',  # a prickleback
+                'Pacific Cod',   # Gadiformes Gadidae Gadus macrocephalus
+                'Gadoid Unid.',  # Gadiformes Gadidae
 
                 'Eelpout Unid.',  # Perciformes Zoarcidae
-                'Ronquil Unid.',  # related to eelpouts, but not the same
-                'Prowfish',  # Perciformes Zaproridae Zaprora silenus
+                'Prowfish',       # Perciformes Zaproridae Zaprora silenus
+                'Prickleback',    # Perciformes Zoarcoidei Stichaeidae - eel-like
+                'Stichaeidae',    # Perciformes Zoarcoidei Stichaeidae - a prickleback
+
+                'Ronquil Unid.',  # Perciformes Bathymasteridae - related to eelpouts, but not the same
+                'Searcher',       # Perciformes Bathymasteridae Bathymaster signatus
+
             ],
 
             'flat_fish': [
-                'Pacific Halibut',  # Pleuronectiformes Pleuronectidae Hippoglossus stenolepis
-                'Arrowtooth Flounder',  # Pleuronectiformes Pleuronectidae Atheresthes stomias
                 'Flatfish Unid.',
+                'Pacific Halibut',      # Pleuronectiformes Pleuronectidae Hippoglossus stenolepis
+                'Arrowtooth Flounder',  # Pleuronectiformes Pleuronectidae Atheresthes stomias
+                'Dover Sole',           # Pleuronectiformes Soleidae Solea solea
                 'Rex Sole',
                 'Rock Sole Unid.',
                 'Flathead Sole',
-                'Dover Sole',   # Pleuronectiformes Soleidae Solea solea
             ],
 
             'rock_fish': [
-                'Poacher Unid.',  # Scorpaeniformes Cottoidea Agonidae
 
                 'Snailfish Unid.',  # Scorpaeniformes Cyclopteroidea Liparidae
-                'Shortspine Thornyhead',  # Scorpaeniformes Sebastidae Sebastolobus alascanus
-                'Thornyhead Unid.',  # Scorpaeniformes Sebastidae Sebastolobus
 
-                'Hexagrammidae sp.',  # Scorpaeniformes Hexagrammoidei Hexagrammidae
+                'Shortspine Thornyhead',  # Scorpaeniformes Sebastidae Sebastolobus alascanus
+                'Thornyhead Unid.',       # Scorpaeniformes Sebastidae Sebastolobus
+
 
                 'Sablefish',  # Scorpaeniformes  Anoplopomatidae Anoplopoma fimbria
 
@@ -226,13 +225,16 @@ def get_coarse_mapping():
                 'Quillback Rockfish',
                 'Darkblotched Rockfish',
 
-                'Sculpin Unid.',
-                'Irish Lord',  # Scorpaeniformes Cottidae Hemilepidotus hemilepidotus
 
-                'Greenling Unid.',
-                'Kelp Greenling',  # Scorpaeniformes Hexagrammidae decagrammus
+                'Sculpin Unid.',  # Scorpaeniformes Cottoidea
+                'Poacher Unid.',  # Scorpaeniformes Cottoidea Agonidae
+                'Irish Lord',     # Scorpaeniformes Cottoidea Cottidae Hemilepidotus hemilepidotus
 
-                'Atka Mackerel',  # Scorpaeniformes Hexagrammidae Pleurogrammus Pleurogrammus monopterygius
+                'Hexagrammidae sp.',  # Scorpaeniformes Hexagrammoidei Hexagrammidae
+                'Greenling Unid.',    # Scorpaeniformes Hexagrammidae
+                'Kelp Greenling',     # Scorpaeniformes Hexagrammidae decagrammus
+                'Atka Mackerel',      # Scorpaeniformes Hexagrammidae Pleurogrammus Pleurogrammus monopterygius
+                'Lingcod',            # Scorpaeniformes Hexagrammidae Ophiodon elongatus
 
                 'Pacific Ocean Perch',  # Scorpaeniformes Sebastidae Sebastes alutus
             ],
@@ -276,6 +278,7 @@ def get_coarse_mapping():
                 if val in mapping:
                     assert key == mapping[val]
                 mapping[val] = key
+
     return mapping
 
     # newfreq = {}
@@ -289,9 +292,94 @@ def get_coarse_mapping():
     # print(ub.repr2(newfreq))
 
 
+def do_fine_graine_level_sets(self, mapping):
+    inverted = ub.invert_dict(mapping, False)
+
+    for sup, subs in inverted.items():
+        print('sup = {!r}'.format(sup))
+        for sub in subs:
+            if sub in self.name_to_cat:
+                cat = self.name_to_cat[sub]
+                n = len(self.cid_to_aids[cat['id']])
+                if n:
+                    print('  * {} = {}'.format(sub, n))
+
+    fine_grained_map = {}
+
+    custom_fine_grained_map = {v: k for k, vs in {
+        'unidentified roundfish': [
+            'unidentified roundfish',
+            'unidentified roundfish (less than half)',
+            'unknown roundfish'
+            'Rockfish Unid.'
+        ],
+
+        'unidentified sebastomus': [
+            'sebastes_2species',
+            'unknown sebastomus',
+            'unknown rockfish',
+            'Thornyhead Unid.',
+            'Hexagrammidae sp.',
+        ],
+
+        'prickleback': [
+            'Prickleback',
+            'Stichaeidae',
+        ],
+
+        'Flatfish Unid.': [
+            'Flatfish Unid.',
+            'unknown flatfish',
+        ]
+    }.items() for v in vs}
+
+    import re
+    def normalize_name(name):
+        norm = custom_fine_grained_map.get(name, name).lower()
+        norm = norm.replace(' (less than half)', '')
+        norm = norm.replace('probable', '')
+        norm = norm.replace('width', '')
+        norm = norm.replace('inexact', '')
+        # norm = norm.replace('Unid.', 'unidentified')
+        # norm = norm.replace('unknown', 'unidentified')
+        norm = norm.replace('unid.', '')
+        norm = norm.replace('unknown', '')
+        norm = norm.replace('unidentified', '')
+        norm = re.sub('  *', ' ', norm)
+        norm = norm.strip()
+        return norm
+
+    for cat in self.cats.values():
+        name = cat['name']
+        # normalize the name
+        norm = normalize_name(name)
+        fine_grained_map[name] = norm
+
+    fine_grained_level_set = ub.invert_dict(fine_grained_map, False)
+    print(ub.repr2(fine_grained_level_set))
+
+    for sup, subs in inverted.items():
+        print('* COARSE-CLASS = {!r}'.format(sup))
+        for norm in sorted(set([normalize_name(sub) for sub in subs])):
+            raws = fine_grained_level_set.get(norm, [])
+            if raws:
+                print('    * fine-class = {!r}'.format(norm))
+                if len(raws) > 1:
+                    # or list(raws)[0] != norm:
+                    print(ub.indent('* raw-classes = {}'.format(ub.repr2(raws, nl=1)), ' ' * 8))
+
+
 def fix_full_truthfiles():
     """
-    rsync -avpR acidalia:/home/git/phase0-annotations.tar.gz ~/Downloads
+    hacks:
+
+        rsync -avpR acidalia:/home/git/phase0-annotations.tar.gz ~/Downloads
+
+        rm -rf ~/data/viame-challenge-2018/phase0-annotations
+        rm -rf ~/data/viame-challenge-2018/phase0-*.mscoco.json
+
+        tar xvzf ~git/phase0-annotations-old-names.tar.gz -C ~/data/viame-challenge-2018
+        ls ~/data/viame-challenge-2018
     """
     data_dir = ub.truepath('~/data')
     full_annots = join(data_dir, 'viame_full_annotation_files')
@@ -317,12 +405,12 @@ def make_baseline_truthfiles():
     ub.ensuredir(challenge_work_dir)
 
     img_root = join(challenge_data_dir, 'phase0-imagery')
-    annot_dir = join(challenge_data_dir, 'phase0-annotations')
+    annot_dir = join(challenge_data_dir, 'phase0-annotations-old-names')
     fpaths = list(glob.glob(join(annot_dir, '*.json')))
     # ignore the non-bounding box nwfsc and afsc datasets for now
 
     # exclude = ('nwfsc', 'afsc', 'mouss', 'habcam')
-    # exclude = ('nwfsc', 'afsc', 'mouss',)
+    # exclude = ('mbari',)
     # fpaths = [p for p in fpaths if not basename(p).startswith(exclude)]
 
     print('Reading')
@@ -344,7 +432,7 @@ def make_baseline_truthfiles():
     self._run_fixes()
     print(ub.repr2(self.category_annotation_frequency()))
 
-    self.dump(join(challenge_work_dir, 'phase0-merged.mscoco.json'))
+    self.dump(join(challenge_work_dir, 'phase0-merged-raw.mscoco.json'))
 
     if True:
         # Cleanup the dataset
@@ -358,11 +446,15 @@ def make_baseline_truthfiles():
 
     print(ub.repr2(self.category_annotation_frequency()))
     print(sum(list(self.category_annotation_frequency().values())))
+
+    # Remap to coarse categories
     self.coarsen_categories(get_coarse_mapping())
     print(ub.repr2(self.category_annotation_frequency()))
     print(sum(list(self.category_annotation_frequency().values())))
 
     print(ub.repr2(self.basic_stats()))
+
+    self.dump(join(challenge_work_dir, 'phase0-merged-coarse.mscoco.json'))
 
     if False:
         # aid = list(self.anns.values())[0]['id']
@@ -408,6 +500,9 @@ def make_baseline_truthfiles():
     train_dset.dump(join(challenge_work_dir, 'phase0-merged-train.mscoco.json'))
     test_dset.dump(join(challenge_work_dir, 'phase0-merged-test.mscoco.json'))
 
+    num_classes = len(self.cats)
+    print('num_classes = {!r}'.format(num_classes))
+
     # Make a detectron yaml file
     config_text = ub.codeblock(
         """
@@ -449,7 +544,7 @@ def make_baseline_truthfiles():
         OUTPUT_DIR: /work/viame-challenge-2018/output
         """)
     config_text = config_text.format(
-        num_classes=len(self.cats),
+        num_classes=num_classes,
     )
     ub.writeto(join(challenge_work_dir, 'phase0-faster-rcnn.yaml'), config_text)
 
@@ -468,8 +563,7 @@ def make_baseline_truthfiles():
         git fetch --all
         git checkout general_dataset
 
-        # curl https://github.com/Erotemic/Detectron/blob/42d44b2d155c775dc509b6a44518d0c582f8cdf5/tools/train_net.py
-        # wget https://github.com/Erotemic/Detectron/blob/42d44b2d155c775dc509b6a44518d0c582f8cdf5/lib/core/config.py
+        python2 tools/train_net.py --cfg /work/viame-challenge-2018/phase0-faster-rcnn.yaml OUTPUT_DIR /work/viame-challenge-2018/output
         """)
 
     print(docker_cmd)
