@@ -293,8 +293,8 @@ def get_coarse_mapping():
 
 
 def do_fine_graine_level_sets(self, mapping):
-    inverted = ub.invert_dict(mapping, False)
 
+    inverted = ub.invert_dict(mapping, False)
     for sup, subs in inverted.items():
         print('sup = {!r}'.format(sup))
         for sub in subs:
@@ -303,6 +303,9 @@ def do_fine_graine_level_sets(self, mapping):
                 n = len(self.cid_to_aids[cat['id']])
                 if n:
                     print('  * {} = {}'.format(sub, n))
+
+    mapping = get_coarse_mapping()
+    inverted = ub.invert_dict(mapping, False)
 
     fine_grained_map = {}
 
@@ -349,8 +352,10 @@ def do_fine_graine_level_sets(self, mapping):
         norm = norm.strip()
         return norm
 
-    for cat in self.cats.values():
-        name = cat['name']
+    catnames = [cat['name'] for cat in self.cats.values()]
+    catnames = list(mapping.keys())
+
+    for name in catnames:
         # normalize the name
         norm = normalize_name(name)
         fine_grained_map[name] = norm
@@ -367,6 +372,19 @@ def do_fine_graine_level_sets(self, mapping):
                 if len(raws) > 1:
                     # or list(raws)[0] != norm:
                     print(ub.indent('* raw-classes = {}'.format(ub.repr2(raws, nl=1)), ' ' * 8))
+
+    import networkx as nx
+    G = nx.DiGraph()
+    for norm in fine_grained_map.values():
+        G.add_node(norm)
+
+    for sup, subs in inverted.items():
+        G.add_node(sup)
+        for norm in sorted(set([normalize_name(sub) for sub in subs])):
+            G.add_edge(norm, sup)
+    if False:
+        import plottool as pt
+        pt.show_nx(G, layoutkw=dict(prog='neato'), arrow_width=.1, sep=10)
 
 
 def fix_full_truthfiles():
@@ -539,6 +557,7 @@ def make_baseline_truthfiles():
           SCALES: (800,)
           MAX_SIZE: 1333
           NMS: 0.5
+          FORCE_JSON_DATASET_EVAL: True
           RPN_PRE_NMS_TOP_N: 6000
           RPN_POST_NMS_TOP_N: 1000
         OUTPUT_DIR: /work/viame-challenge-2018/output

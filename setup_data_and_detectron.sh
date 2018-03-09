@@ -60,7 +60,7 @@ install_detectron_docker_image(){
 
 train_detectron_model(){
     # startup the detectron docker image and mount your data and work directory
-    nvidia-docker run -v $WORK_DIR:/work $DATA_DIR:/data -it detectron:c2-cuda9-cudnn7 bash
+    nvidia-docker run -v $WORK_DIR:/work -v $DATA_DIR:/data -it detectron:c2-cuda9-cudnn7 bash
 
     codeblock "
     MODEL:
@@ -91,6 +91,7 @@ train_detectron_model(){
       BATCH_SIZE_PER_IM: 512
     TEST:
       DATASETS: ('coco_2014_minival',)
+      FORCE_JSON_DATASET_EVAL: True
       SCALES: (800,)
       MAX_SIZE: 1333
       NMS: 0.5
