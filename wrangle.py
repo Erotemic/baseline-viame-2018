@@ -26,7 +26,7 @@ def fix_full_truthfiles():
     dsets = []
     for fpath in fpaths:
         dset = CocoDataset(fpath, autobuild=False)
-        dset._run_fixes()
+        # dset._run_fixes()
         dset._build_index()
         dsets.append(dset)
 
@@ -55,7 +55,7 @@ def make_baseline_truthfiles():
     dsets = []
     for fpath in fpaths:
         dset = CocoDataset(fpath, autobuild=False)
-        dset._run_fixes()
+        # dset._run_fixes()
         dset._build_index()
         dsets.append(dset)
 
@@ -67,8 +67,8 @@ def make_baseline_truthfiles():
     print('Merging')
     self = CocoDataset.union(*dsets)
     self.img_root = img_root
-    self._run_fixes()
-    print(ub.repr2(self.category_annotation_frequency()))
+    # self._run_fixes()
+    # print(ub.repr2(self.category_annotation_frequency()))
 
     self.dump(join(challenge_work_dir, 'phase0-merged-raw.mscoco.json'))
 

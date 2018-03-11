@@ -127,13 +127,13 @@ def get_coarse_mapping():
         # nwfsc_seq0
         {
             'rock_fish': [
-                'greenstriped rockfish',
                 'unknown rockfish',
-                'yelloweye rockfish',  # Scorpaeniformes Sebastes ruberrimus
-                'rosethorn rockfish',
-                'stripetail rockfish',
-                'pygmy/puget sound rockfish',
-                'redstripe rockfish',
+                'greenstriped rockfish',
+                'yelloweye rockfish',   # Scorpaeniformes Sebastes ruberrimus
+                'rosethorn rockfish',   # Sebastes helvomaculatus
+                'stripetail rockfish',  # Sebastes saxicola
+                'pygmy/puget sound rockfish',  # Sebastes emphaeus
+                'redstripe rockfish',  # Sebastes proriger
                 'wsr/sebastomus',
                 'unknown sebastomus',
 
@@ -191,7 +191,7 @@ def get_coarse_mapping():
                 'Arrowtooth Flounder',  # Pleuronectiformes Pleuronectidae Atheresthes stomias
                 'Dover Sole',           # Pleuronectiformes Soleidae Solea solea
                 'Rex Sole',
-                'Rock Sole Unid.',
+                'Rock Sole Unid.',      # Pleuronectiformes Pleuronectidae Lepidopsetta bilineata
                 'Flathead Sole',
             ],
 
@@ -208,17 +208,17 @@ def get_coarse_mapping():
                 'Rockfish Unid.',
                 'Northern Rockfish',  # Scorpaeniformes Sebastes polyspinis
                 'Dusky Rockfish',     # Scorpaeniformes Sebastes ciliatus
-                'Harlequin Rockfish',
-                'Sharpchin Rockfish',
-                'Blackspotted Rockfish',
-                'Black Rockfish',
-                'Redstripe Rockfish',
-                'Shortraker Rockfish',
-                'Silvergray Rockfish',
-                'Rosethorn Rockfish',
-                'Yelloweye Rockfish',  # Scorpaeniformes Sebastes ruberrimus
-                'Quillback Rockfish',
-                'Darkblotched Rockfish',
+                'Harlequin Rockfish',  # Sebastes variegatus
+                'Sharpchin Rockfish',  # Sebastes zacentrus
+                'Blackspotted Rockfish',  # Sebastes melanostictus
+                'Black Rockfish',  # Sebastes melanops
+                'Redstripe Rockfish',  # Sebastes proriger
+                'Shortraker Rockfish',  # Sebastes borealis
+                'Silvergray Rockfish',  # Sebastes brevispinis
+                'Rosethorn Rockfish',  # Sebastes helvomaculatus
+                'Yelloweye Rockfish',   # Scorpaeniformes Sebastes ruberrimus
+                'Quillback Rockfish',  # Sebastes maliger
+                'Darkblotched Rockfish',  # Sebastes crameri
 
 
                 'Sculpin Unid.',  # Scorpaeniformes Cottoidea
@@ -239,13 +239,16 @@ def get_coarse_mapping():
             ],
 
             'shrimp': [
+                # Shrimp can refer to a few things:
+                # Euarthropoda Crustacea Malacostraca Decapoda Dendrobranchiata
+                # Arthropoda Crustacea Malacostraca Pleocyemata Caridea
                 'Shrimp',
                 'Shrimp Unid.',
             ],
 
             'echinoderm': [
                 'Starfish Unid.',
-                'nudibranch',
+                'nudibranch',  # NOTE: not a echinoderm
             ],
 
             'skate': [
