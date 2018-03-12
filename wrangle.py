@@ -4,13 +4,12 @@ from os.path import join
 import glob
 import ubelt as ub
 from coco_wrangler import CocoDataset, StratifiedGroupKFold
-from viame_wrangler import get_coarse_mapping
+from viame_wrangler.cats_2018 import get_coarse_mapping
 
 
-def fix_full_truthfiles():
+def setup_data():
     """
     hacks:
-
         rsync -avpR acidalia:/home/git/phase0-annotations.tar.gz ~/Downloads
 
         rm -rf ~/data/viame-challenge-2018/phase0-annotations
@@ -18,32 +17,35 @@ def fix_full_truthfiles():
 
         tar xvzf ~git/phase0-annotations-old-names.tar.gz -C ~/data/viame-challenge-2018
         ls ~/data/viame-challenge-2018
+
+    Challenge Website:
+        http://www.viametoolkit.org/cvpr-2018-workshop-data-challenge/
+
+    Challenge Download Data:
+        https://challenge.kitware.com/girder#collection/5a722b2c56357d621cd46c22/folder/5a9028a256357d0cb633ce20
+        * Groundtruth: phase0-annotations.tar.gz
+        * Images: phase0-imagery.tar.gz
+
+    ```
+    CODE_DIR=$HOME/code
+    DATA_DIR=$HOME/data
+    WORK_DIR=$HOME/work
+
+    mkdir -p $DATA_DIR/viame-challenge-2018
+    tar xvzf $HOME/Downloads/phase0-annotations.tar.gz -C $DATA_DIR/viame-challenge-2018
+    tar xvzf $HOME/Downloads/phase0-imagery.tar.gz -C $DATA_DIR/viame-challenge-2018
+    ```
+
     """
-    data_dir = ub.truepath('~/data')
-    full_annots = join(data_dir, 'viame_full_annotation_files')
-    fpaths = list(glob.glob(join(full_annots, '*.json')))
-
-    dsets = []
-    for fpath in fpaths:
-        dset = CocoDataset(fpath, autobuild=False)
-        # dset._run_fixes()
-        dset._build_index()
-        dsets.append(dset)
-
-    self = CocoDataset.union(*dsets)
-
-
-def make_baseline_truthfiles():
-    work_dir = ub.truepath('~/work')
-    data_dir = ub.truepath('~/data')
-
+    work_dir = ub.truepath(ub.argval('--work', default='~/work'))
+    data_dir = ub.truepath(ub.argval('--data', default='~/data'))
     challenge_data_dir = join(data_dir, 'viame-challenge-2018')
     challenge_work_dir = join(work_dir, 'viame-challenge-2018')
-
     ub.ensuredir(challenge_work_dir)
 
     img_root = join(challenge_data_dir, 'phase0-imagery')
-    annot_dir = join(challenge_data_dir, 'phase0-annotations-old-names')
+    # annot_dir = join(challenge_data_dir, 'phase0-annotations-old-names')
+    annot_dir = join(challenge_data_dir, 'phase0-annotations')
     fpaths = list(glob.glob(join(annot_dir, '*.json')))
     # ignore the non-bounding box nwfsc and afsc datasets for now
 
@@ -60,76 +62,83 @@ def make_baseline_truthfiles():
         dsets.append(dset)
 
         # print(ub.repr2([d['name'] for d in dset.cats.values()]))
-        # print(dset.img_root)
+
+    for dset in dsets:
+        print(dset.img_root)
         # print(ub.repr2(dset.basic_stats()))
-        # print(ub.repr2(dset.category_annotation_frequency()))
+        print(ub.repr2(dset.category_annotation_frequency()))
 
     print('Merging')
-    self = CocoDataset.union(*dsets)
-    self.img_root = img_root
-    # self._run_fixes()
-    # print(ub.repr2(self.category_annotation_frequency()))
+    merged = CocoDataset.union(*dsets)
+    merged.img_root = img_root
+    # merged._run_fixes()
+    # print(ub.repr2(merged.category_annotation_frequency()))
 
-    self.dump(join(challenge_work_dir, 'phase0-merged-raw.mscoco.json'))
+    merged.dump(join(challenge_work_dir, 'phase0-merged-raw.mscoco.json'))
 
     if True:
         # Cleanup the dataset
-        self._remove_bad_annotations()
+        merged._remove_bad_annotations()
+        merged._remove_radius_annotations()
 
-        self._remove_radius_annotations()
+        merged._remove_keypoint_annotations()
+        merged._remove_empty_images()
 
-        self._remove_keypoint_annotations()
-
-        self._remove_empty_images()
-
-    print(ub.repr2(self.category_annotation_frequency()))
-    print(sum(list(self.category_annotation_frequency().values())))
+    print(ub.repr2(merged.category_annotation_frequency()))
+    print(sum(list(merged.category_annotation_frequency().values())))
 
     # Remap to coarse categories
-    self.coarsen_categories(get_coarse_mapping())
-    print(ub.repr2(self.category_annotation_frequency()))
-    print(sum(list(self.category_annotation_frequency().values())))
+    merged.coarsen_categories(get_coarse_mapping())
+    print(ub.repr2(merged.category_annotation_frequency()))
+    print(sum(list(merged.category_annotation_frequency().values())))
 
-    print(ub.repr2(self.basic_stats()))
+    print(ub.repr2(merged.basic_stats()))
 
-    self.dump(join(challenge_work_dir, 'phase0-merged-coarse.mscoco.json'))
+    merged.dump(join(challenge_work_dir, 'phase0-merged-coarse.mscoco.json'))
 
     if False:
-        # aid = list(self.anns.values())[0]['id']
-        # self.show_annotation(aid)
-        gids = sorted([gid for gid, aids in self.gid_to_aids.items() if aids])
+        # aid = list(merged.anns.values())[0]['id']
+        # merged.show_annotation(aid)
+        gids = sorted([gid for gid, aids in merged.gid_to_aids.items() if aids])
         # import utool as ut
         # for gid in ut.InteractiveIter(gids):
         for gid in gids:
             from matplotlib import pyplot as plt
             fig = plt.figure(1)
             fig.clf()
-            self.show_annotation(gid=gid)
+            merged.show_annotation(gid=gid)
             fig.canvas.draw()
 
     # Split into train / test  set
     print('Splitting')
     skf = StratifiedGroupKFold(n_splits=2)
-    groups = [ann['image_id'] for ann in self.anns.values()]
-    y = [ann['category_id'] for ann in self.anns.values()]
-    X = [ann['id'] for ann in self.anns.values()]
+    groups = [ann['image_id'] for ann in merged.anns.values()]
+    y = [ann['category_id'] for ann in merged.anns.values()]
+    X = [ann['id'] for ann in merged.anns.values()]
     split = list(skf.split(X=X, y=y, groups=groups))[0]
     train_idx, test_idx = split
 
     print('Taking subsets')
-    aid_to_gid = {aid: ann['image_id'] for aid, ann in self.anns.items()}
+    aid_to_gid = {aid: ann['image_id'] for aid, ann in merged.anns.items()}
     train_aids = list(ub.take(X, train_idx))
     test_aids = list(ub.take(X, test_idx))
     train_gids = sorted(set(ub.take(aid_to_gid, train_aids)))
     test_gids = sorted(set(ub.take(aid_to_gid, test_aids)))
 
-    train_dset = self.subset(train_gids)
-    test_dset = self.subset(test_gids)
+    train_dset = merged.subset(train_gids)
+    test_dset = merged.subset(test_gids)
 
     print('--- Training Stats ---')
     print(ub.repr2(train_dset.basic_stats()))
     print('--- Testing Stats ---')
     print(ub.repr2(test_dset.basic_stats()))
+
+
+def setup_detectron(train_dset, test_dset):
+    work_dir = ub.truepath(ub.argval('--work', default='~/work'))
+    data_dir = ub.truepath(ub.argval('--data', default='~/data'))
+    challenge_work_dir = join(work_dir, 'viame-challenge-2018')
+    ub.ensuredir(challenge_work_dir)
 
     train_dset._ensure_imgsize()
     test_dset._ensure_imgsize()
@@ -138,7 +147,7 @@ def make_baseline_truthfiles():
     train_dset.dump(join(challenge_work_dir, 'phase0-merged-train.mscoco.json'))
     test_dset.dump(join(challenge_work_dir, 'phase0-merged-test.mscoco.json'))
 
-    num_classes = len(self.cats)
+    num_classes = len(train_dset.cats)
     print('num_classes = {!r}'.format(num_classes))
 
     # Make a detectron yaml file

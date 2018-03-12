@@ -451,16 +451,22 @@ class CocoDataset(ub.NiceRepr):
             ('n_cats', len(self.dataset['categories'])),
         ])
 
-    def coarsen_categories(self, mapping):
+    def coarsen_categories(self, mapper):
         """
         Create a coarser categorization
+
+        Mapper can be a dict or a function that maps old names to new names.
         """
         new_cats = []
         old_cats = self.dataset['categories']
         new_name_to_cat = {}
         old_to_new_id = {}
+
+        if not callable(mapper):
+            mapper = mapper.__getitem__
+
         for old_cat in old_cats:
-            new_name = mapping[old_cat['name']]
+            new_name = mapper(old_cat['name'])
             if new_name in new_name_to_cat:
                 new_cat = new_name_to_cat[new_name]
             else:

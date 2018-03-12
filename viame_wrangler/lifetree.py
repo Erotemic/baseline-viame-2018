@@ -1,14 +1,26 @@
-from Bio import Entrez
+import networkx as nx
 import ubelt as ub
 import time
 import tqdm
 
 
 class Entry(ub.NiceRepr):
-    def __init__(entry, code, common_names=[], note=None, alias=None, ncbi_taxid=None):
+    def __init__(entry, code, common_names=[], note=None, alias=None,
+                 ncbi_taxid=None, superclass=None):
+        entry.superclass = superclass
         entry.ncbi_taxid = ncbi_taxid
         entry.code = code
         entry.alias = alias
+        if alias:
+            if not ub.iterable(common_names):
+                common_names = [common_names]
+
+            common_names = common_names[:]
+            if ub.iterable(alias):
+                common_names.extend(alias)
+            else:
+                common_names.append(alias)
+
         entry.common_names = common_names
         entry.note = note
         entry.lineage = None
@@ -62,6 +74,7 @@ class Lineage(ub.NiceRepr):
         'species',
     ]
     RANKS = [
+        'object',
         'life',
         'domain',
         'kingdom', 'infrakingdom',
@@ -185,8 +198,14 @@ class LifeCatalog(object):
         ('phylum:Arthropoda', 'phylum:Euarthropoda')
     ]
 
-    def __init__(self):
+    def __init__(self, autoparse=False):
+        # TODO: how do we insert custom non-scientific nodes?
+
         self.entries = [
+            Entry('object:Physical'),
+            Entry('object:Physical life:NonLiving', ['negative']),
+            Entry('object:Physical life:Living domain:Eukarya'),
+
             # non-fish
             Entry('domain:Eukarya kingdom:Animalia phylum:Chordata', 'cordate'),
             Entry('domain:Eukarya kingdom:Animalia phylum:Chordata subphylum:Vertebrata', 'vertebrate', ncbi_taxid=7742),
@@ -197,30 +216,53 @@ class LifeCatalog(object):
             Entry('phylum:Chordata class:Mammalia order:Primates family:Hominidae genus:Homo species:sapiens', 'human'),
             Entry('phylum:Chordata class:Ascidiacea order:Aplousobranchia family:Didemnidae genus:Didemnum', 'Didemnum'),
 
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura', 'crab'),
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda genus:Cancer borealis', 'jonah crab'),
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda genus:Cancer irroratus', 'rock crab'),
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda genus:Chionoecetes bairdi', ['tanner crab', 'bairdi crab']),
+            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura', 'unclassified crab'),
+
+            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Cancer borealis', 'jonah crab'),
+            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Cancer irroratus', 'rock crab'),
+
+            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Chionoecetes bairdi', ['tanner crab', 'bairdi crab', 'bairdi tanner crab']),
             Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda family:Nephropidae', 'lobster'),
             Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda family:Nephropidae genus:Homarus americanus', 'american lobster'),
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda suborder:Dendrobranchiata', 'decapod shrimps'),
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda suborder:Pleocyemata infraorder:Caridea', 'caridean shrimp'),
+
+            # Entry('custom:shrimp'),
+
+            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda suborder:Dendrobranchiata', 'decapod shrimp', superclass='shrimp'),
+            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda suborder:Pleocyemata infraorder:Caridea', 'caridean shrimp', superclass='shrimp'),
 
             Entry('phylum:Mollusca class:Cephalopoda order:Octopoda', 'unclassified octopus'),
+            Entry('phylum:Mollusca class:Cephalopoda order:Teuthida', 'unclassified squid'),
             Entry('phylum:Mollusca class:Gastropoda', 'unclassified snail'),
-            Entry('phylum:Mollusca class:Gastropoda infraclass:Euthyneura superorder:Nudipleura order:Nudibranchia', ['Nudibranchs', 'opistobranch sea slug']),
+            Entry('phylum:Mollusca class:Gastropoda infraclass:Euthyneura superorder:Nudipleura order:Nudibranchia', ['Nudibranch', 'opistobranch sea slug']),
             Entry('phylum:Mollusca class:Gastropoda family:Buccinidae genus:Buccinum undatum', 'waved whelk'),
             Entry('phylum:Mollusca class:Bivalivia order:Osteroida family:Pectinidae', 'unclassified scallop'),
+            Entry('family:Pectinidae genus:Placopecten magellanicus', 'sea scallop'),
 
             # echinoderms
             Entry('phylum:Echinodermata class:Holothuroidea genus:Psolus', 'sea cucumber'),
-            Entry('Echinodermata Holothuroidea order:Dendrochirotida Psolus segregatus', 'segregatus sea cucumber', alias='Psolus squamatus', ncbi_taxid=NotImplementedError)
+            Entry('Echinodermata Holothuroidea order:Dendrochirotida Psolus segregatus', 'segregatus sea cucumber', alias='Psolus squamatus', ncbi_taxid=NotImplementedError),
             # aphiaID=124713),
-            Entry('Echinodermata superclass:Asterozoa class:Asteroidea', 'starfish'),
+            Entry('Echinodermata superclass:Asterozoa class:Asteroidea', 'unclassified starfish'),
             Entry('Echinodermata superclass:Asterozoa class:Asteroidea genus:Rathbunaster californicus', 'californicus starfish'),
 
             # Flat fish
-            Entry('phylum:Chordata class:Actinopterygii order:Pleuronectiformes', 'unclassified flat fish'),
+            Entry('phylum:Chordata class:Actinopterygii superclass:Osteichthyes', 'unclassified fish', note='this is the vast majority of fish'),
+            Entry('class:Actinopterygii superclass:Osteichthyes', note='ray-finned fish'),
+
+            # Hack for roundfish
+            Entry('class:Actinopterygii superclass:Osteichthyes superorder:NotPleuronectiformes', 'unclassified roundfish', note='hack for roundfish'),
+
+            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Carcharhiniformes', 'Carcharhiniforme'),
+            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Chimaeriformes', 'Chimaeriforme'),
+            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Clupeiformes', 'Clupeiformes'),
+            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Gadiformes', 'Gadiforme'),
+            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Lophiiformes', 'Lophiiformes'),
+            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Osmeriformes', 'Osmeriforme'),
+            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Perciformes', 'Perciforme'),
+            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Rajiformes', 'Rajiforme'),
+            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Scorpaeniformes', 'Scorpaeniforme'),
+            Entry('superclass:Osteichthyes order:Pleuronectiformes', 'unclassified flatfish'),
+
             Entry('Pleuronectiformes family:Pleuronectidae genus:Glyptocephalus zachirus', 'rex sole'),
             Entry('Pleuronectiformes family:Pleuronectidae genus:Eopsetta jordani', 'petrale sole'),
             Entry('Pleuronectiformes family:Pleuronectidae genus:Parophrys vetulus', 'english sole'),
@@ -232,29 +274,18 @@ class LifeCatalog(object):
             Entry('Pleuronectiformes family:Soleidae genus:Solea solea', ['dover sole', 'black sole', 'common sole']),
 
             # Round Fish - any fish that is not a flatfish
-            Entry('phylum:Chordata class:Actinopterygii', note='ray-finned fish'),
-            Entry('phylum:Chordata class:Actinopterygii order:Carcharhiniformes', 'Carcharhiniforme'),
-            Entry('phylum:Chordata class:Actinopterygii order:Chimaeriformes', 'Chimaeriforme'),
-            Entry('phylum:Chordata class:Actinopterygii order:Clupeiformes', 'Clupeiformes'),
-            Entry('phylum:Chordata class:Actinopterygii order:Gadiformes', 'Gadiforme'),
-            Entry('phylum:Chordata class:Actinopterygii order:Lophiiformes', 'Lophiiformes'),
-            Entry('phylum:Chordata class:Actinopterygii order:Osmeriformes', 'Osmeriforme'),
-            Entry('phylum:Chordata class:Actinopterygii order:Perciformes', 'Perciforme'),
-            Entry('phylum:Chordata class:Actinopterygii order:Rajiformes', 'Rajiforme'),
-            Entry('phylum:Chordata class:Actinopterygii order:Scorpaeniformes', 'Scorpaeniforme'),
-
-            Entry('order:Lophiiformes family:Lophius', 'monkfish'),
-            Entry('order:Rajiformes family:Rajidae', 'skate'),
+            Entry('order:Lophiiformes family:Lophius', 'unclassified monkfish'),
+            Entry('order:Rajiformes family:Rajidae', 'unclassified skate'),
             Entry('order:Rajiformes family:Rajidae genus:Dipturus species:oxyrinchus', 'longnose skate'),
             Entry('order:Carcharhiniformes family:Carcharhinidae', 'requiem shark'),
             Entry('order:Carcharhiniformes family:Carcharhinidae genus:Carcharhinus plumbeus', 'sandbar shark'),
-            Entry('order:Osmeriformes family:Osmeridae', 'Smelt'),
+            Entry('order:Osmeriformes family:Osmeridae', 'unclassified Smelt'),
 
             Entry('Perciformes family:Pholidichthyidae genus:Pholidichthys leucotaenia', 'convict worm'),
             Entry('Perciformes family:Lutjanidae genus:Pristipomoides filamentosus', 'crimson jobfish'),
             Entry('Perciformes family:Lutjanidae genus:Pristipomoides sieboldii', 'lavandar jobfish'),
 
-            Entry('Perciformes family:Zoarcidae genus:Lycodes', 'eelpout'),
+            Entry('Perciformes family:Zoarcidae genus:Lycodes', 'unclassified eelpout'),
             Entry('Perciformes family:Zoarcidae Lycodes diapterus', 'black eelpout'),
 
             # name is Lycodopsis in the DB
@@ -263,7 +294,7 @@ class LifeCatalog(object):
             Entry('Perciformes family:Zaproridae genus:Zaprora silenus', 'Prowfish'),
             Entry('Perciformes suborder:Zoarcoidei genus:Stichaeidae', ['Prickleback', 'Stichaeidae']),
 
-            Entry('Perciformes family:Bathymasteridae', 'Ronquil'),
+            Entry('Perciformes family:Bathymasteridae', 'unclassified Ronquil'),
             Entry('Perciformes family:Bathymasteridae genus:Bathymaster signatus', 'Searcher'),
 
             Entry('Chimaeriformes family:Chimaeridae genus:Hydrolagus colliei', 'spotted ratfish'),
@@ -271,17 +302,17 @@ class LifeCatalog(object):
 
             Entry('Gadiformes family:Merlucciidae genus:Merluccius productus', 'north pacific hake'),
             Entry('Gadiformes family:Gadidae genus:Pollachius', 'Pollock'),
-            Entry('Gadiformes family:Gadidae', 'Gadoid'),
+            Entry('Gadiformes family:Gadidae', 'unclassified Gadoid'),
             Entry('Gadiformes family:Gadidae genus:Gadus macrocephalus', 'Pacific Cod'),
 
             # rockfish
-            Entry('Scorpaeniformes family:Sebastidae genus:Sebastes', 'rockfish'),
+            Entry('Scorpaeniformes family:Sebastidae genus:Sebastes', ['unidentified rockfish', 'sebastes_2species', 'unclassified Sebastomus', 'wsr/Sebastomus']),
             Entry('Scorpaeniformes Sebastes borealis', 'Shortraker Rockfish'),
             Entry('Scorpaeniformes Sebastes brevispinis', 'Silvergray Rockfish'),
             Entry('Scorpaeniformes Sebastes ciliatus', 'Dusky Rockfish'),
             Entry('Scorpaeniformes Sebastes crameri', 'Darkblotched Rockfish'),
             Entry('Scorpaeniformes Sebastes elongatus', 'greenstriped rockfish'),
-            Entry('Scorpaeniformes Sebastes emphaeus', ['puget sound rockfish', 'pygmy rockfish']),
+            Entry('Scorpaeniformes Sebastes emphaeus', ['puget sound rockfish', 'pygmy rockfish', 'pygmy/puget sound rockfish']),
             Entry('Scorpaeniformes Sebastes helvomaculatus', 'rosethorn rockfish'),
             Entry('Scorpaeniformes Sebastes maliger', 'Quillback Rockfish'),
             Entry('Scorpaeniformes Sebastes melanops', 'Black Rockfish'),
@@ -294,27 +325,29 @@ class LifeCatalog(object):
             Entry('Scorpaeniformes Sebastes zacentrus', 'Sharpchin Rockfish'),
             Entry('Scorpaeniformes Sebastes alutus', 'Pacific Ocean Perch'),
 
-            Entry('Scorpaeniformes family:Sebastidae genus:Sebastolobus', 'Thornyhead'),
+            Entry('Scorpaeniformes family:Sebastidae genus:Sebastolobus', 'unclassified Thornyhead'),
             Entry('Scorpaeniformes family:Sebastidae genus:Sebastolobus altivelis', 'Longspine thornyhead'),
             Entry('Scorpaeniformes family:Sebastidae genus:Sebastolobus alascanus', 'Shortspine thornyhead'),
 
-            Entry('Scorpaeniformes suborder:Cottoidei superfamily:Cottoidea', 'sculpin'),
+            Entry('Scorpaeniformes suborder:Cottoidei superfamily:Cottoidea', 'unclassified sculpin'),
             Entry('Scorpaeniformes Cottoidea family:Cottidae genus:Icelinus filamentosus', 'threadfin sculpin'),
             Entry('Scorpaeniformes Cottoidea family:Cottidae genus:Hemilepidotus hemilepidotus', 'Irish Lord'),
 
-            Entry('Scorpaeniformes family:Agonidae', 'poacher'),
-            Entry('Scorpaeniformes Agonidae genus:Aspidophoroides monopterygius', 'alligatorfish'),
+            Entry('Scorpaeniformes Cottoidea family:Agonidae', ['unclassified poacher', 'poacher/cottid']),
+            Entry('Scorpaeniformes Cottoidea Agonidae genus:Aspidophoroides monopterygius', 'alligatorfish'),
 
             Entry('Scorpaeniformes superfamily:Cyclopteroidea family:Liparidae', 'Snailfish'),
 
             Entry('Scorpaeniformes family:Anoplopomatidae genus:Anoplopoma fimbria', 'Sablefish'),
 
-            Entry('Scorpaeniformes suborder:Hexagrammoidei family:Hexagrammidae', ['Hexagrammidae', 'greenling']),  # incorporates greenlings
-            Entry('Scorpaeniformes Hexagrammidae', ['Greenling']),
+            Entry('Scorpaeniformes suborder:Hexagrammoidei family:Hexagrammidae', ['Hexagrammidae', 'unclassified greenling']),  # incorporates greenlings
+            # Entry('Scorpaeniformes Hexagrammidae', ['Greenling']),
             Entry('Scorpaeniformes Hexagrammidae genus:Hexagrammos decagrammus', 'Kelp Greenling'),
             Entry('Scorpaeniformes Hexagrammidae genus:Pleurogrammus monopterygius', 'Atka Mackerel'),
             Entry('Scorpaeniformes Hexagrammidae genus:Ophiodon elongatus', 'Lingcod'),
         ]
+        if autoparse:
+            self.parse_entries()
 
     def parse_entries(self):
         r"""
@@ -326,12 +359,9 @@ class LifeCatalog(object):
 
         Example:
             >>> from viame_wrangler.lifetree import *  # NOQA
-            >>> self = LifeCatalog()
-            >>> G = self.parse_entries()
+            >>> self = LifeCatalog(False)
+            >>> self.parse_entries()
         """
-        db = MyTaxdb('taxadb.sqlite')
-
-        import networkx as nx
         dag = nx.DiGraph()
 
         def _setrank(node_id, rank):
@@ -353,14 +383,20 @@ class LifeCatalog(object):
             new = {c.lower() for c in common_names}
             dag.node[node_id]['common_names'] = old.union(new)
 
+        # For each entry, parse the parts of the coded scientific name to build
+        # up the nodes in the tree structure.
         for entry in tqdm.tqdm(self.entries):
-            # For each entry, parse the parts of the coded scientific name to
-            # build up the nodes in the tree structure.
+            print('entry = {!r}'.format(entry))
             node_id = entry.id
             dag.add_node(node_id)
             _setcommon(node_id, entry.common_names)
 
-            for pu, pv in ub.iter_window(entry.partial_path(), 2):
+            path = entry.partial_path()
+            # handle one-node path
+            urank, u = path[0]
+            if urank:
+                _setrank(u, urank)
+            for pu, pv in ub.iter_window(path, 2):
                 urank, u = pu
                 vrank, v = pv
                 dag.add_edge(u, v)
@@ -369,10 +405,17 @@ class LifeCatalog(object):
                 if vrank:
                     _setrank(v, vrank)
 
+        # Populate node attributes
         for node_id in dag.nodes():
             node = dag.node[node_id]
             common_names = list(node.get('common_names', []))
-            rank = node['rank']
+            try:
+                rank = node['rank']
+            except KeyError:
+                print('Failed to parse rank')
+                print('node_id = {!r}'.format(node_id))
+                raise
+
             node['label'] = rank + ':' + node_id
             if common_names:
                 node['label'] = node['label'] + '\n' + ub.repr2(common_names, nl=0)
@@ -384,127 +427,128 @@ class LifeCatalog(object):
         # transfer node attributes
         for node_id, data in dag.nodes(data=True):
             G.nodes[node_id].update(data)
+        self.G = G
+        self.Gr = G.reverse()
 
         # Find the full lineage of each entry
-        Gr = G.reverse()
-        def make_lineage(node_id):
-            path = [node_id] + [e[1] for e in nx.bfs_edges(Gr, node_id)]
-            lineage = ub.odict([(G.node[n]['rank'], n) for n in path][::-1])
-            # db.lookup(lineage.id)
-            return Lineage(lineage)
-
         for entry in self.entries:
             node_id = entry.id
-            entry.lineage = make_lineage(node_id)
+            entry.lineage = self.node_lineage(node_id)
+            # print('entry.lineage = {}'.format(entry.lineage.code()))
 
-        for entry in self.entries:
-            print('entry.lineage = {}'.format(entry.lineage.code()))
+    def node_lineage(self, node_id):
+        path = [node_id] + [e[1] for e in nx.bfs_edges(self.Gr, node_id)]
+        lineage = ub.odict([(self.G.node[n]['rank'], n) for n in path][::-1])
+        # db.lookup(lineage.id)
+        return Lineage(lineage)
+
+    def expand_lineages(self):
+        # TODO: Try and use the NCBI database to find the rank and lineage
+        # of items that were not given
+        # TODO: walk the database and get the lineages
+        db = MyTaxdb('taxadb.sqlite')
 
         # The leafs are the finest-grained categories
+        G = self.G
         leafs = [n for n in G.nodes() if G.out_degree(n) == 0]
         fine_categories = []
         for node_id in leafs:
-            lineage = make_lineage(node_id)
+            lineage = self.node_lineage(node_id)
             fullname = ' '.join(list(lineage.lineage_path(False)))
             fine_categories.append(fullname)
         print(ub.repr2(sorted(fine_categories)))
 
-        if False:
-            # TODO: Try and use the NCBI database to find the rank and lineage
-            # of items that were not given
-            # TODO: walk the database and get the lineages
+        # Lycodes pacificus = 1772091?
+        id_to_entry = {entry.id: entry for entry in self.entries}
+        for node_id in tqdm.tqdm(leafs, desc='lookup ncbi'):
+            entry = id_to_entry[node_id]
+            if entry.ncbi_taxid is None:
+                results = list(db.search(node_id, exact=True))
+                if len(results) == 1:
+                    row = results[0]
+                    entry.ncbi_taxid = row.ncbi_taxid
+                elif len(results) == 0:
+                    print('Cannot find node_id = {!r}'.format(node_id))
+                else:
+                    print('Ambiguous node_id = {!r}'.format(node_id))
 
-            # Lycodes pacificus = 1772091?
-            id_to_entry = {entry.id: entry for entry in self.entries}
-            for node_id in tqdm.tqdm(leafs, desc='lookup ncbi'):
+        nodeid_to_ncbi = {}
+        for entry in self.entries:
+            if entry.ncbi_taxid is not NotImplementedError:
+                nodeid_to_ncbi[entry.id] = entry.ncbi_taxid
+
+        ncbi_to_row = {}
+        def _register_row(row):
+            if row.tax_name not in G.nodes:
+                G.add_node(row.tax_name)
+                print('NEW NODE tax_name = {!r}'.format(row.tax_name))
+            G.nodes[row.tax_name]['ncbi_taxid'] = row.ncbi_taxid
+            ncbi_to_row[ncbi_taxid] = row
+
+        def _lookup_from_taxid(ncbi_taxid):
+            if ncbi_taxid is NotImplementedError:
+                return None
+            if ncbi_taxid not in ncbi_to_row:
+                row = db.lookup(node_id)
+                _register_row(row)
+            row = ncbi_to_row[ncbi_taxid]
+            # recursively lookup parents
+            # parent = _lookup_from_taxid(row.parent_taxid)
+            return row
+
+        def _lookup_from_nodeid(node_id):
+            ncbi_taxid = None
+            if node_id in id_to_entry:
                 entry = id_to_entry[node_id]
-                if entry.ncbi_taxid is None:
-                    results = list(db.search(node_id, exact=True))
-                    if len(results) == 1:
-                        row = results[0]
-                        entry.ncbi_taxid = row.ncbi_taxid
-                    elif len(results) == 0:
-                        print('Cannot find node_id = {!r}'.format(node_id))
-                    else:
-                        print('Ambiguous node_id = {!r}'.format(node_id))
+                ncbi_taxid = entry.ncbi_taxid
+            ncbi_taxid = G.node.get(node_id, {}).get('ncbi_taxid', ncbi_taxid)
 
-            nodeid_to_ncbi = {}
-            for entry in self.entries:
-                if entry.ncbi_taxid is not NotImplementedError:
-                    nodeid_to_ncbi[entry.id] = entry.ncbi_taxid
-
-            ncbi_to_row = {}
-            def _register_row(row):
-                if row.tax_name not in G.nodes:
-                    G.add_node(row.tax_name)
-                    print('NEW NODE tax_name = {!r}'.format(row.tax_name))
-                G.nodes[row.tax_name]['ncbi_taxid'] = row.ncbi_taxid
-                ncbi_to_row[ncbi_taxid] = row
-
-            def _lookup_from_taxid(ncbi_taxid):
-                if ncbi_taxid is NotImplementedError:
-                    return None
-                if ncbi_taxid not in ncbi_to_row:
-                    row = db.lookup(node_id)
+            if ncbi_taxid is None:
+                results = list(db.search(node_id, exact=True))
+                if len(results) == 1:
+                    row = results[0]
+                    ncbi_taxid = row.ncbi_taxid
                     _register_row(row)
-                row = ncbi_to_row[ncbi_taxid]
-                # recursively lookup parents
-                parent = _lookup_from_taxid(row.parent_taxid)
-                return row
+                elif len(results) == 0:
+                    print('Cannot find node_id = {!r}'.format(node_id))
+                else:
+                    print('Ambiguous node_id = {!r}'.format(node_id))
+                ncbi_taxid
+            row = _lookup_from_taxid(ncbi_taxid)
+            return row
 
-            def _lookup_from_nodeid(node_id):
-                ncbi_taxid = None
-                if node_id in id_to_entry:
-                    entry = id_to_entry[node_id]
-                    ncbi_taxid = entry.ncbi_taxid
-                ncbi_taxid = G.node.get(node_id, {}).get('ncbi_taxid', ncbi_taxid)
+            # if ncbi_taxid not in ncbi_to_row:
+            #     row = db.lookup(ncbi_taxid)
+            #     ncbi_to_row[ncbi_taxid] = row
+            # else:
+            #     row = ncbi_to_row[ncbi_taxid]
+            # return row
 
-                if ncbi_taxid is None:
-                    results = list(db.search(node_id, exact=True))
-                    if len(results) == 1:
-                        row = results[0]
-                        ncbi_taxid = row.ncbi_taxid
-                        _register_row(row)
-                    elif len(results) == 0:
-                        print('Cannot find node_id = {!r}'.format(node_id))
-                    else:
-                        print('Ambiguous node_id = {!r}'.format(node_id))
-                    ncbi_taxid
-                row = _lookup_from_taxid(ncbi_taxid)
-                return row
+        for node_id in tqdm.tqdm(list(G.nodes()), desc='lookup ncbi'):
+            row = _lookup_from_nodeid(node_id)
 
-                # if ncbi_taxid not in ncbi_to_row:
-                #     row = db.lookup(ncbi_taxid)
-                #     ncbi_to_row[ncbi_taxid] = row
-                # else:
-                #     row = ncbi_to_row[ncbi_taxid]
-                # return row
+        for ncbi_taxid in tqdm.tqdm(list(nodeid_to_ncbi.values())):
+            if ncbi_taxid is not None:
+                row = _lookup(ncbi_taxid)
+                parent = _lookup(row.parent_taxid)
+                G.add_edge(parent.tax_name, row.tax_name)
 
-            for node_id in tqdm.tqdm(list(G.nodes()), desc='lookup ncbi'):
-                row = _lookup_from_nodeid(node_id)
+                if parent.tax_name in G.nodes:
+                    G.node[parent.tax_name]['ncbi_taxid'] = row.parent_taxid
+                else:
+                    pass
 
-            for ncbi_taxid in tqdm.tqdm(list(nodeid_to_ncbi.values())):
-                if ncbi_taxid is not None:
-                    row = _lookup(ncbi_taxid)
-                    parent = _lookup(row.parent_taxid)
-                    G.add_edge(parent.tax_name, row.tax_name)
-
-                    if parent.tax_name in G.nodes:
-                        G.node[parent.tax_name]['ncbi_taxid'] = row.parent_taxid
-                    else:
-
-        if False:
+        def draw(self):
             import plottool as pt
-            G.graph['rankdir'] = 'LR'
-            pt.dump_nx_ondisk(G, 'classes.png')
+            self.G.graph['rankdir'] = 'LR'
+            pt.dump_nx_ondisk(self.G, 'classes.png')
 
             # agraph = nx.nx_agraph.to_agraph(G)
             # agraph.layout(prog='dot')
             # agraph.draw(ub.truepath('classes2.png'))
-
-            G = dag
-            G.graph['rankdir'] = 'LR'
-            pt.dump_nx_ondisk(G, 'dag-classes.png')
+            # G = dag
+            # G.graph['rankdir'] = 'LR'
+            # pt.dump_nx_ondisk(G, 'dag-classes.png')
             # pt.qtensure()
             # pt.show_nx(G, layoutkw={'prog': 'dot'}, arrow_width=.0001)
         return G
@@ -526,7 +570,7 @@ class QueryGaurd(object):
 GAURD = QueryGaurd()
 
 
-def names():
+def ignore_names():
     """
     pip install biopython
 
@@ -535,6 +579,7 @@ def names():
     https://stackoverflow.com/questions/16504238/attempting-to-obtain-taxonomic-information-from-biopython
     """
     # # Always tell NCBI who you are
+    from Bio import Entrez
     Entrez.email = ub.cmd('git config --global --get user.email')['out'].strip()
 
     def get_tax_info(species):
