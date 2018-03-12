@@ -5,8 +5,10 @@ import tqdm
 
 
 class Entry(ub.NiceRepr):
-    def __init__(entry, code, common_names=[], note=None):
+    def __init__(entry, code, common_names=[], note=None, alias=None, ncbi_taxid=None):
+        entry.ncbi_taxid = ncbi_taxid
         entry.code = code
+        entry.alias = alias
         entry.common_names = common_names
         entry.note = note
         entry.lineage = None
@@ -187,7 +189,7 @@ class LifeCatalog(object):
         self.entries = [
             # non-fish
             Entry('domain:Eukarya kingdom:Animalia phylum:Chordata', 'cordate'),
-            Entry('domain:Eukarya kingdom:Animalia phylum:Chordata subphylum:Vertebrata', 'vertebrate'),
+            Entry('domain:Eukarya kingdom:Animalia phylum:Chordata subphylum:Vertebrata', 'vertebrate', ncbi_taxid=7742),
             Entry('domain:Eukarya kingdom:Animalia phylum:Arthropoda', ['arthropod', 'Euarthropoda']),
             Entry('domain:Eukarya kingdom:Animalia phylum:Mollusca', 'mollusc'),
             Entry('domain:Eukarya kingdom:Animalia phylum:Echinodermata', 'echinoderm'),
@@ -212,7 +214,8 @@ class LifeCatalog(object):
 
             # echinoderms
             Entry('phylum:Echinodermata class:Holothuroidea genus:Psolus', 'sea cucumber'),
-            Entry('Echinodermata Holothuroidea order:Dendrochirotida Psolus squamatus', 'squamatus sea cucumber'),
+            Entry('Echinodermata Holothuroidea order:Dendrochirotida Psolus segregatus', 'segregatus sea cucumber', alias='Psolus squamatus', ncbi_taxid=NotImplementedError)
+            # aphiaID=124713),
             Entry('Echinodermata superclass:Asterozoa class:Asteroidea', 'starfish'),
             Entry('Echinodermata superclass:Asterozoa class:Asteroidea genus:Rathbunaster californicus', 'californicus starfish'),
 
@@ -229,7 +232,7 @@ class LifeCatalog(object):
             Entry('Pleuronectiformes family:Soleidae genus:Solea solea', ['dover sole', 'black sole', 'common sole']),
 
             # Round Fish - any fish that is not a flatfish
-            Entry('phylum:Chordata class:Actinopterygii order:Anacanthini', note='ray-finned fish'),
+            Entry('phylum:Chordata class:Actinopterygii', note='ray-finned fish'),
             Entry('phylum:Chordata class:Actinopterygii order:Carcharhiniformes', 'Carcharhiniforme'),
             Entry('phylum:Chordata class:Actinopterygii order:Chimaeriformes', 'Chimaeriforme'),
             Entry('phylum:Chordata class:Actinopterygii order:Clupeiformes', 'Clupeiformes'),
@@ -253,7 +256,10 @@ class LifeCatalog(object):
 
             Entry('Perciformes family:Zoarcidae genus:Lycodes', 'eelpout'),
             Entry('Perciformes family:Zoarcidae Lycodes diapterus', 'black eelpout'),
-            Entry('Perciformes family:Zoarcidae Lycodes pacificus', 'blackbelly eelpout'),
+
+            # name is Lycodopsis in the DB
+            Entry('Perciformes family:Zoarcidae genus:Lycodopsis pacificus', 'blackbelly eelpout', ncbi_taxid=1772091, alias='Lycodes pacificus'),
+
             Entry('Perciformes family:Zaproridae genus:Zaprora silenus', 'Prowfish'),
             Entry('Perciformes suborder:Zoarcoidei genus:Stichaeidae', ['Prickleback', 'Stichaeidae']),
 
@@ -323,6 +329,8 @@ class LifeCatalog(object):
             >>> self = LifeCatalog()
             >>> G = self.parse_entries()
         """
+        db = MyTaxdb('taxadb.sqlite')
+
         import networkx as nx
         dag = nx.DiGraph()
 
@@ -369,10 +377,6 @@ class LifeCatalog(object):
             if common_names:
                 node['label'] = node['label'] + '\n' + ub.repr2(common_names, nl=0)
 
-        # TODO: Try and use the NCBI database to find the rank and lineage of
-        # items that were not given
-        # db = MyTaxdb('taxadb.sqlite')
-
         assert nx.is_directed_acyclic_graph(dag)
         G = nx.algorithms.dag.transitive_reduction(dag)
         assert nx.is_tree(G), 'should reduce to a tree'
@@ -386,6 +390,7 @@ class LifeCatalog(object):
         def make_lineage(node_id):
             path = [node_id] + [e[1] for e in nx.bfs_edges(Gr, node_id)]
             lineage = ub.odict([(G.node[n]['rank'], n) for n in path][::-1])
+            # db.lookup(lineage.id)
             return Lineage(lineage)
 
         for entry in self.entries:
@@ -405,9 +410,97 @@ class LifeCatalog(object):
         print(ub.repr2(sorted(fine_categories)))
 
         if False:
+            # TODO: Try and use the NCBI database to find the rank and lineage
+            # of items that were not given
+            # TODO: walk the database and get the lineages
+
+            # Lycodes pacificus = 1772091?
+            id_to_entry = {entry.id: entry for entry in self.entries}
+            for node_id in tqdm.tqdm(leafs, desc='lookup ncbi'):
+                entry = id_to_entry[node_id]
+                if entry.ncbi_taxid is None:
+                    results = list(db.search(node_id, exact=True))
+                    if len(results) == 1:
+                        row = results[0]
+                        entry.ncbi_taxid = row.ncbi_taxid
+                    elif len(results) == 0:
+                        print('Cannot find node_id = {!r}'.format(node_id))
+                    else:
+                        print('Ambiguous node_id = {!r}'.format(node_id))
+
+            nodeid_to_ncbi = {}
+            for entry in self.entries:
+                if entry.ncbi_taxid is not NotImplementedError:
+                    nodeid_to_ncbi[entry.id] = entry.ncbi_taxid
+
+            ncbi_to_row = {}
+            def _register_row(row):
+                if row.tax_name not in G.nodes:
+                    G.add_node(row.tax_name)
+                    print('NEW NODE tax_name = {!r}'.format(row.tax_name))
+                G.nodes[row.tax_name]['ncbi_taxid'] = row.ncbi_taxid
+                ncbi_to_row[ncbi_taxid] = row
+
+            def _lookup_from_taxid(ncbi_taxid):
+                if ncbi_taxid is NotImplementedError:
+                    return None
+                if ncbi_taxid not in ncbi_to_row:
+                    row = db.lookup(node_id)
+                    _register_row(row)
+                row = ncbi_to_row[ncbi_taxid]
+                # recursively lookup parents
+                parent = _lookup_from_taxid(row.parent_taxid)
+                return row
+
+            def _lookup_from_nodeid(node_id):
+                ncbi_taxid = None
+                if node_id in id_to_entry:
+                    entry = id_to_entry[node_id]
+                    ncbi_taxid = entry.ncbi_taxid
+                ncbi_taxid = G.node.get(node_id, {}).get('ncbi_taxid', ncbi_taxid)
+
+                if ncbi_taxid is None:
+                    results = list(db.search(node_id, exact=True))
+                    if len(results) == 1:
+                        row = results[0]
+                        ncbi_taxid = row.ncbi_taxid
+                        _register_row(row)
+                    elif len(results) == 0:
+                        print('Cannot find node_id = {!r}'.format(node_id))
+                    else:
+                        print('Ambiguous node_id = {!r}'.format(node_id))
+                    ncbi_taxid
+                row = _lookup_from_taxid(ncbi_taxid)
+                return row
+
+                # if ncbi_taxid not in ncbi_to_row:
+                #     row = db.lookup(ncbi_taxid)
+                #     ncbi_to_row[ncbi_taxid] = row
+                # else:
+                #     row = ncbi_to_row[ncbi_taxid]
+                # return row
+
+            for node_id in tqdm.tqdm(list(G.nodes()), desc='lookup ncbi'):
+                row = _lookup_from_nodeid(node_id)
+
+            for ncbi_taxid in tqdm.tqdm(list(nodeid_to_ncbi.values())):
+                if ncbi_taxid is not None:
+                    row = _lookup(ncbi_taxid)
+                    parent = _lookup(row.parent_taxid)
+                    G.add_edge(parent.tax_name, row.tax_name)
+
+                    if parent.tax_name in G.nodes:
+                        G.node[parent.tax_name]['ncbi_taxid'] = row.parent_taxid
+                    else:
+
+        if False:
             import plottool as pt
             G.graph['rankdir'] = 'LR'
             pt.dump_nx_ondisk(G, 'classes.png')
+
+            # agraph = nx.nx_agraph.to_agraph(G)
+            # agraph.layout(prog='dot')
+            # agraph.draw(ub.truepath('classes2.png'))
 
             G = dag
             G.graph['rankdir'] = 'LR'
@@ -540,40 +633,42 @@ class TaxRow(ub.NiceRepr):
 
 
 class MyTaxdb(object):
-    def __init__(self, fpath):
+    columns = ['parent_taxid', 'ncbi_taxid', 'tax_name', 'lineage_level']
+
+    def __init__(db, fpath):
         from taxadb.taxid import TaxID
-        self.taxid = TaxID(dbtype='sqlite', dbname=fpath)
-        self.db = self.taxid.database
-        self.cur = self.db.get_cursor()
+        db.taxid = TaxID(dbtype='sqlite', dbname=fpath)
+        db.database = db.taxid.database
+        db.cur = db.database.get_cursor()
         # db.get_tables()
         # db.get_columns('taxa')
         # db.get_columns('accession')
 
-    def search(self, term):
-        columns = ['parent_taxid', 'ncbi_taxid', 'tax_name', 'lineage_level']
-        self.cur.execute(ub.codeblock(
+    def search(db, term, exact=False):
+        if not exact:
+            term = '%{}%'.format(term)
+        db.cur.execute(ub.codeblock(
             '''
             SELECT {}
             FROM taxa
-            WHERE tax_name LIKE "%{}%"
-            ''').format(','.join(columns), term))
-        result = self.cur.fetchone()
+            WHERE tax_name LIKE "{}"
+            ''').format(','.join(db.columns), term))
+        result = db.cur.fetchone()
         while result:
             if result:
-                info = dict(zip(columns, result))
+                info = dict(zip(db.columns, result))
                 yield TaxRow(info)
-            result = self.cur.fetchone()
+            result = db.cur.fetchone()
 
-    def lookup(self, ncbi_taxid):
-        columns = ['parent_taxid', 'ncbi_taxid', 'tax_name', 'lineage_level']
-        self.cur.execute(ub.codeblock(
+    def lookup(db, ncbi_taxid):
+        db.cur.execute(ub.codeblock(
             '''
             SELECT {}
             FROM taxa
             WHERE ncbi_taxid={}
-            ''').format(','.join(columns), ncbi_taxid))
-        result = self.cur.fetchone()
+            ''').format(','.join(db.columns), ncbi_taxid))
+        result = db.cur.fetchone()
         if not result:
             raise KeyError(ncbi_taxid)
-        info = TaxRow(dict(zip(columns, result)))
+        info = TaxRow(dict(zip(db.columns, result)))
         return info
