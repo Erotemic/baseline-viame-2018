@@ -6,11 +6,12 @@ import tqdm
 
 class Entry(ub.NiceRepr):
     def __init__(entry, code, common_names=[], note=None, alias=None,
-                 ncbi_taxid=None, superclass=None):
+                 ncbi_taxid=None, superclass=None, subclasses=[]):
         entry.superclass = superclass
         entry.ncbi_taxid = ncbi_taxid
         entry.code = code
         entry.alias = alias
+        entry.subclasses = subclasses
         if alias:
             if not ub.iterable(common_names):
                 common_names = [common_names]
@@ -42,7 +43,7 @@ class Entry(ub.NiceRepr):
         if value.islower() or rank == 'species':
             assert value.islower(), 'species is lowercase'
             assert rank is None or rank == 'species'
-            assert len(parts) > 1
+            assert len(parts) > 1, '{}'.format(entry.parts)
             rank2, value2 = parts[-2]
             assert rank2 is None or rank2 == 'genus'
             assert value2
@@ -63,6 +64,20 @@ class Entry(ub.NiceRepr):
         nice = ' '.join([p.split(':')[-1] for p in entry.code.split(' ')])
         return nice
         # return entry.code
+
+
+class NonStandardEntry(Entry):
+    def __init__(entry, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        entry.ncbi_taxid = NotImplemented
+
+    def partial_path(entry):
+        # Infer what we can about the ranks of each part in the code
+        return list(entry.parts)
+
+
+class TaxonomicEntry(Entry):
+    pass
 
 
 class Lineage(ub.NiceRepr):
@@ -93,7 +108,9 @@ class Lineage(ub.NiceRepr):
 
     def update(self, other):
         for k, v in other.items():
-            assert k in self.data
+            if k is 'null':
+                continue
+            assert k in self.data, 'k={}'.format(k)
             old = self.data[k]
             assert old is None or old == v
             self.data[k] = v
@@ -198,153 +215,167 @@ class LifeCatalog(object):
         ('phylum:Arthropoda', 'phylum:Euarthropoda')
     ]
 
-    def __init__(self, autoparse=False):
+    def __init__(self, autoparse=True):
         # TODO: how do we insert custom non-scientific nodes?
 
         self.entries = [
-            Entry('object:Physical'),
-            Entry('object:Physical life:NonLiving', ['negative']),
-            Entry('object:Physical life:Living domain:Eukarya'),
+            # --- ROOT ---
+            NonStandardEntry('Physical'),
 
-            # non-fish
-            Entry('domain:Eukarya kingdom:Animalia phylum:Chordata', 'cordate'),
-            Entry('domain:Eukarya kingdom:Animalia phylum:Chordata subphylum:Vertebrata', 'vertebrate', ncbi_taxid=7742),
-            Entry('domain:Eukarya kingdom:Animalia phylum:Arthropoda', ['arthropod', 'Euarthropoda']),
-            Entry('domain:Eukarya kingdom:Animalia phylum:Mollusca', 'mollusc'),
-            Entry('domain:Eukarya kingdom:Animalia phylum:Echinodermata', 'echinoderm'),
+            # --- NON LIVING ---
+            NonStandardEntry('Physical NonLiving', ['negative']),
+            NonStandardEntry('Physical NonLiving rock', ['scallop like rock']),
+            NonStandardEntry('Physical NonLiving DustCloud', ['dust cloud']),
 
-            Entry('phylum:Chordata class:Mammalia order:Primates family:Hominidae genus:Homo species:sapiens', 'human'),
-            Entry('phylum:Chordata class:Ascidiacea order:Aplousobranchia family:Didemnidae genus:Didemnum', 'Didemnum'),
+            # --- HIGH LEVEL LIVING ---
+            NonStandardEntry('domain:Eukarya', ['spc d'], superclass='Physical'),
 
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura', 'unclassified crab'),
+            TaxonomicEntry('domain:Eukarya kingdom:Animalia phylum:Chordata', 'cordate'),
+            TaxonomicEntry('domain:Eukarya kingdom:Animalia phylum:Chordata subphylum:Vertebrata', 'vertebrate', ncbi_taxid=7742),
+            TaxonomicEntry('domain:Eukarya kingdom:Animalia phylum:Arthropoda', ['arthropod', 'Euarthropoda']),
+            TaxonomicEntry('domain:Eukarya kingdom:Animalia phylum:Mollusca', 'mollusc'),
+            TaxonomicEntry('domain:Eukarya kingdom:Animalia phylum:Echinodermata', 'echinoderm'),
 
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Cancer borealis', 'jonah crab'),
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Cancer irroratus', 'rock crab'),
+            # ---- FISH ----
+            TaxonomicEntry('phylum:Chordata Vertebrata Fish', 'unclassified fish', note='this is the vast majority of fish', subclasses=['Actinopterygii']),
+            TaxonomicEntry('class:Actinopterygii superclass:Osteichthyes', note='ray-finned fish'),
+            NonStandardEntry('superclass:Osteichthyes NotPleuronectiformes', 'unclassified roundfish', note='any fish that is not a flatfish is a roundfish'),
 
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Chionoecetes bairdi', ['tanner crab', 'bairdi crab', 'bairdi tanner crab']),
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda family:Nephropidae', 'lobster'),
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda family:Nephropidae genus:Homarus americanus', 'american lobster'),
+            TaxonomicEntry('superclass:Osteichthyes NotPleuronectiformes order:Carcharhiniformes', 'Carcharhiniforme'),
+            TaxonomicEntry('superclass:Osteichthyes NotPleuronectiformes order:Chimaeriformes', 'Chimaeriforme'),
+            TaxonomicEntry('superclass:Osteichthyes NotPleuronectiformes order:Clupeiformes', 'Clupeiformes'),
+            TaxonomicEntry('superclass:Osteichthyes NotPleuronectiformes order:Gadiformes', 'Gadiforme'),
+            TaxonomicEntry('superclass:Osteichthyes NotPleuronectiformes order:Lophiiformes', 'Lophiiformes'),
+            TaxonomicEntry('superclass:Osteichthyes NotPleuronectiformes order:Osmeriformes', 'Osmeriforme'),
+            TaxonomicEntry('superclass:Osteichthyes NotPleuronectiformes order:Perciformes', 'Perciforme'),
+            TaxonomicEntry('superclass:Osteichthyes NotPleuronectiformes order:Rajiformes', 'Rajiforme'),
+            TaxonomicEntry('superclass:Osteichthyes NotPleuronectiformes order:Scorpaeniformes', 'Scorpaeniforme'),
+            TaxonomicEntry('superclass:Osteichthyes order:Pleuronectiformes', 'unclassified flatfish'),
 
-            # Entry('custom:shrimp'),
-
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda suborder:Dendrobranchiata', 'decapod shrimp', superclass='shrimp'),
-            Entry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda suborder:Pleocyemata infraorder:Caridea', 'caridean shrimp', superclass='shrimp'),
-
-            Entry('phylum:Mollusca class:Cephalopoda order:Octopoda', 'unclassified octopus'),
-            Entry('phylum:Mollusca class:Cephalopoda order:Teuthida', 'unclassified squid'),
-            Entry('phylum:Mollusca class:Gastropoda', 'unclassified snail'),
-            Entry('phylum:Mollusca class:Gastropoda infraclass:Euthyneura superorder:Nudipleura order:Nudibranchia', ['Nudibranch', 'opistobranch sea slug']),
-            Entry('phylum:Mollusca class:Gastropoda family:Buccinidae genus:Buccinum undatum', 'waved whelk'),
-            Entry('phylum:Mollusca class:Bivalivia order:Osteroida family:Pectinidae', 'unclassified scallop'),
-            Entry('family:Pectinidae genus:Placopecten magellanicus', 'sea scallop'),
-
-            # echinoderms
-            Entry('phylum:Echinodermata class:Holothuroidea genus:Psolus', 'sea cucumber'),
-            Entry('Echinodermata Holothuroidea order:Dendrochirotida Psolus segregatus', 'segregatus sea cucumber', alias='Psolus squamatus', ncbi_taxid=NotImplementedError),
-            # aphiaID=124713),
-            Entry('Echinodermata superclass:Asterozoa class:Asteroidea', 'unclassified starfish'),
-            Entry('Echinodermata superclass:Asterozoa class:Asteroidea genus:Rathbunaster californicus', 'californicus starfish'),
-
-            # Flat fish
-            Entry('phylum:Chordata class:Actinopterygii superclass:Osteichthyes', 'unclassified fish', note='this is the vast majority of fish'),
-            Entry('class:Actinopterygii superclass:Osteichthyes', note='ray-finned fish'),
-
-            # Hack for roundfish
-            Entry('class:Actinopterygii superclass:Osteichthyes superorder:NotPleuronectiformes', 'unclassified roundfish', note='hack for roundfish'),
-
-            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Carcharhiniformes', 'Carcharhiniforme'),
-            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Chimaeriformes', 'Chimaeriforme'),
-            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Clupeiformes', 'Clupeiformes'),
-            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Gadiformes', 'Gadiforme'),
-            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Lophiiformes', 'Lophiiformes'),
-            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Osmeriformes', 'Osmeriforme'),
-            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Perciformes', 'Perciforme'),
-            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Rajiformes', 'Rajiforme'),
-            Entry('superclass:Osteichthyes superorder:NotPleuronectiformes order:Scorpaeniformes', 'Scorpaeniforme'),
-            Entry('superclass:Osteichthyes order:Pleuronectiformes', 'unclassified flatfish'),
-
-            Entry('Pleuronectiformes family:Pleuronectidae genus:Glyptocephalus zachirus', 'rex sole'),
-            Entry('Pleuronectiformes family:Pleuronectidae genus:Eopsetta jordani', 'petrale sole'),
-            Entry('Pleuronectiformes family:Pleuronectidae genus:Parophrys vetulus', 'english sole'),
-            Entry('Pleuronectiformes family:Pleuronectidae genus:Hippoglossus stenolepis', 'Pacific Halibut'),
-            Entry('Pleuronectiformes family:Pleuronectidae genus:Atheresthes stomias', 'Arrowtooth Flounder'),
-            Entry('Pleuronectiformes family:Pleuronectidae genus:Lepidopsetta bilineata', 'Rock Sole'),
-            Entry('Pleuronectiformes family:Pleuronectidae genus:Hippoglossoides elassodon', 'Flathead Sole'),
-
-            Entry('Pleuronectiformes family:Soleidae genus:Solea solea', ['dover sole', 'black sole', 'common sole']),
+            TaxonomicEntry('Pleuronectiformes family:Pleuronectidae genus:Glyptocephalus zachirus', 'rex sole'),
+            TaxonomicEntry('Pleuronectiformes family:Pleuronectidae genus:Eopsetta jordani', 'petrale sole'),
+            TaxonomicEntry('Pleuronectiformes family:Pleuronectidae genus:Parophrys vetulus', 'english sole'),
+            TaxonomicEntry('Pleuronectiformes family:Pleuronectidae genus:Hippoglossus stenolepis', 'Pacific Halibut'),
+            TaxonomicEntry('Pleuronectiformes family:Pleuronectidae genus:Atheresthes stomias', 'Arrowtooth Flounder'),
+            TaxonomicEntry('Pleuronectiformes family:Pleuronectidae genus:Lepidopsetta bilineata', 'Rock Sole'),
+            TaxonomicEntry('Pleuronectiformes family:Pleuronectidae genus:Hippoglossoides elassodon', 'Flathead Sole'),
+            TaxonomicEntry('Pleuronectiformes family:Soleidae genus:Solea solea', ['dover sole', 'black sole', 'common sole']),
 
             # Round Fish - any fish that is not a flatfish
-            Entry('order:Lophiiformes family:Lophius', 'unclassified monkfish'),
-            Entry('order:Rajiformes family:Rajidae', 'unclassified skate'),
-            Entry('order:Rajiformes family:Rajidae genus:Dipturus species:oxyrinchus', 'longnose skate'),
-            Entry('order:Carcharhiniformes family:Carcharhinidae', 'requiem shark'),
-            Entry('order:Carcharhiniformes family:Carcharhinidae genus:Carcharhinus plumbeus', 'sandbar shark'),
-            Entry('order:Osmeriformes family:Osmeridae', 'unclassified Smelt'),
+            TaxonomicEntry('order:Lophiiformes family:Lophius', 'unclassified monkfish'),
+            TaxonomicEntry('order:Rajiformes family:Rajidae', 'unclassified skate'),
+            TaxonomicEntry('order:Rajiformes family:Rajidae genus:Dipturus species:oxyrinchus', 'longnose skate'),
+            TaxonomicEntry('order:Carcharhiniformes family:Carcharhinidae', 'requiem shark'),
+            TaxonomicEntry('order:Carcharhiniformes family:Carcharhinidae genus:Carcharhinus plumbeus', 'sandbar shark'),
+            TaxonomicEntry('order:Osmeriformes family:Osmeridae', 'unclassified Smelt'),
 
-            Entry('Perciformes family:Pholidichthyidae genus:Pholidichthys leucotaenia', 'convict worm'),
-            Entry('Perciformes family:Lutjanidae genus:Pristipomoides filamentosus', 'crimson jobfish'),
-            Entry('Perciformes family:Lutjanidae genus:Pristipomoides sieboldii', 'lavandar jobfish'),
+            TaxonomicEntry('Perciformes family:Pholidichthyidae genus:Pholidichthys leucotaenia', 'convict worm'),
+            TaxonomicEntry('Perciformes family:Lutjanidae genus:Pristipomoides filamentosus', 'crimson jobfish'),
+            TaxonomicEntry('Perciformes family:Lutjanidae genus:Pristipomoides sieboldii', 'lavandar jobfish'),
 
-            Entry('Perciformes family:Zoarcidae genus:Lycodes', 'unclassified eelpout'),
-            Entry('Perciformes family:Zoarcidae Lycodes diapterus', 'black eelpout'),
+            TaxonomicEntry('Perciformes family:Zoarcidae genus:Lycodes', 'unclassified eelpout'),
+            TaxonomicEntry('Perciformes family:Zoarcidae Lycodes diapterus', 'black eelpout'),
 
             # name is Lycodopsis in the DB
-            Entry('Perciformes family:Zoarcidae genus:Lycodopsis pacificus', 'blackbelly eelpout', ncbi_taxid=1772091, alias='Lycodes pacificus'),
+            TaxonomicEntry('Perciformes family:Zoarcidae genus:Lycodopsis pacificus', 'blackbelly eelpout', ncbi_taxid=1772091, alias='Lycodes pacificus'),
 
-            Entry('Perciformes family:Zaproridae genus:Zaprora silenus', 'Prowfish'),
-            Entry('Perciformes suborder:Zoarcoidei genus:Stichaeidae', ['Prickleback', 'Stichaeidae']),
+            TaxonomicEntry('Perciformes family:Zaproridae genus:Zaprora silenus', 'Prowfish'),
+            TaxonomicEntry('Perciformes suborder:Zoarcoidei genus:Stichaeidae', ['Prickleback', 'Stichaeidae']),
 
-            Entry('Perciformes family:Bathymasteridae', 'unclassified Ronquil'),
-            Entry('Perciformes family:Bathymasteridae genus:Bathymaster signatus', 'Searcher'),
+            TaxonomicEntry('Perciformes family:Bathymasteridae', 'unclassified Ronquil'),
+            TaxonomicEntry('Perciformes family:Bathymasteridae genus:Bathymaster signatus', 'Searcher'),
 
-            Entry('Chimaeriformes family:Chimaeridae genus:Hydrolagus colliei', 'spotted ratfish'),
-            Entry('Clupeiformes family:Clupeidae genus:Clupea harengus', 'Herring'),
+            TaxonomicEntry('Chimaeriformes family:Chimaeridae genus:Hydrolagus colliei', 'spotted ratfish'),
+            TaxonomicEntry('Clupeiformes family:Clupeidae genus:Clupea harengus', 'Herring'),
 
-            Entry('Gadiformes family:Merlucciidae genus:Merluccius productus', 'north pacific hake'),
-            Entry('Gadiformes family:Gadidae genus:Pollachius', 'Pollock'),
-            Entry('Gadiformes family:Gadidae', 'unclassified Gadoid'),
-            Entry('Gadiformes family:Gadidae genus:Gadus macrocephalus', 'Pacific Cod'),
+            TaxonomicEntry('Gadiformes family:Merlucciidae genus:Merluccius productus', 'north pacific hake'),
+            TaxonomicEntry('Gadiformes family:Gadidae genus:Pollachius', 'Pollock'),
+            TaxonomicEntry('Gadiformes family:Gadidae', 'unclassified Gadoid'),
+            TaxonomicEntry('Gadiformes family:Gadidae genus:Gadus macrocephalus', 'Pacific Cod'),
 
             # rockfish
-            Entry('Scorpaeniformes family:Sebastidae genus:Sebastes', ['unidentified rockfish', 'sebastes_2species', 'unclassified Sebastomus', 'wsr/Sebastomus']),
-            Entry('Scorpaeniformes Sebastes borealis', 'Shortraker Rockfish'),
-            Entry('Scorpaeniformes Sebastes brevispinis', 'Silvergray Rockfish'),
-            Entry('Scorpaeniformes Sebastes ciliatus', 'Dusky Rockfish'),
-            Entry('Scorpaeniformes Sebastes crameri', 'Darkblotched Rockfish'),
-            Entry('Scorpaeniformes Sebastes elongatus', 'greenstriped rockfish'),
-            Entry('Scorpaeniformes Sebastes emphaeus', ['puget sound rockfish', 'pygmy rockfish', 'pygmy/puget sound rockfish']),
-            Entry('Scorpaeniformes Sebastes helvomaculatus', 'rosethorn rockfish'),
-            Entry('Scorpaeniformes Sebastes maliger', 'Quillback Rockfish'),
-            Entry('Scorpaeniformes Sebastes melanops', 'Black Rockfish'),
-            Entry('Scorpaeniformes Sebastes melanostictus', 'Blackspotted Rockfish'),
-            Entry('Scorpaeniformes Sebastes polyspinis', 'Northern Rockfish'),
-            Entry('Scorpaeniformes Sebastes proriger', 'redstripe rockfish'),
-            Entry('Scorpaeniformes Sebastes ruberrimus', 'yelloweye rockfish'),
-            Entry('Scorpaeniformes Sebastes saxicola', 'stripetail rockfish'),
-            Entry('Scorpaeniformes Sebastes variegatus', 'Harlequin Rockfish'),
-            Entry('Scorpaeniformes Sebastes zacentrus', 'Sharpchin Rockfish'),
-            Entry('Scorpaeniformes Sebastes alutus', 'Pacific Ocean Perch'),
+            TaxonomicEntry('Scorpaeniformes family:Sebastidae genus:Sebastes', ['unidentified rockfish', 'sebastes_2species', 'unclassified Sebastomus', 'wsr/Sebastomus']),
+            TaxonomicEntry('Scorpaeniformes Sebastes borealis', 'Shortraker Rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes brevispinis', 'Silvergray Rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes ciliatus', 'Dusky Rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes crameri', 'Darkblotched Rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes elongatus', 'greenstriped rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes emphaeus', ['puget sound rockfish', 'pygmy rockfish', 'pygmy/puget sound rockfish']),
+            TaxonomicEntry('Scorpaeniformes Sebastes helvomaculatus', 'rosethorn rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes maliger', 'Quillback Rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes melanops', 'Black Rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes melanostictus', 'Blackspotted Rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes polyspinis', 'Northern Rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes proriger', 'redstripe rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes ruberrimus', 'yelloweye rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes saxicola', 'stripetail rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes variegatus', 'Harlequin Rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes zacentrus', 'Sharpchin Rockfish'),
+            TaxonomicEntry('Scorpaeniformes Sebastes alutus', 'Pacific Ocean Perch'),
 
-            Entry('Scorpaeniformes family:Sebastidae genus:Sebastolobus', 'unclassified Thornyhead'),
-            Entry('Scorpaeniformes family:Sebastidae genus:Sebastolobus altivelis', 'Longspine thornyhead'),
-            Entry('Scorpaeniformes family:Sebastidae genus:Sebastolobus alascanus', 'Shortspine thornyhead'),
+            TaxonomicEntry('Scorpaeniformes family:Sebastidae genus:Sebastolobus', 'unclassified Thornyhead'),
+            TaxonomicEntry('Scorpaeniformes family:Sebastidae genus:Sebastolobus altivelis', 'Longspine thornyhead'),
+            TaxonomicEntry('Scorpaeniformes family:Sebastidae genus:Sebastolobus alascanus', 'Shortspine thornyhead'),
 
-            Entry('Scorpaeniformes suborder:Cottoidei superfamily:Cottoidea', 'unclassified sculpin'),
-            Entry('Scorpaeniformes Cottoidea family:Cottidae genus:Icelinus filamentosus', 'threadfin sculpin'),
-            Entry('Scorpaeniformes Cottoidea family:Cottidae genus:Hemilepidotus hemilepidotus', 'Irish Lord'),
+            TaxonomicEntry('Scorpaeniformes suborder:Cottoidei superfamily:Cottoidea', 'unclassified sculpin'),
+            TaxonomicEntry('Scorpaeniformes Cottoidea family:Cottidae genus:Icelinus filamentosus', 'threadfin sculpin'),
+            TaxonomicEntry('Scorpaeniformes Cottoidea family:Cottidae genus:Hemilepidotus hemilepidotus', 'Irish Lord'),
 
-            Entry('Scorpaeniformes Cottoidea family:Agonidae', ['unclassified poacher', 'poacher/cottid']),
-            Entry('Scorpaeniformes Cottoidea Agonidae genus:Aspidophoroides monopterygius', 'alligatorfish'),
+            TaxonomicEntry('Scorpaeniformes Cottoidea family:Agonidae', ['unclassified poacher', 'poacher/cottid']),
+            TaxonomicEntry('Scorpaeniformes Cottoidea Agonidae genus:Aspidophoroides monopterygius', 'alligatorfish'),
 
-            Entry('Scorpaeniformes superfamily:Cyclopteroidea family:Liparidae', 'Snailfish'),
+            TaxonomicEntry('Scorpaeniformes superfamily:Cyclopteroidea family:Liparidae', 'Snailfish'),
 
-            Entry('Scorpaeniformes family:Anoplopomatidae genus:Anoplopoma fimbria', 'Sablefish'),
+            TaxonomicEntry('Scorpaeniformes family:Anoplopomatidae genus:Anoplopoma fimbria', 'Sablefish'),
 
-            Entry('Scorpaeniformes suborder:Hexagrammoidei family:Hexagrammidae', ['Hexagrammidae', 'unclassified greenling']),  # incorporates greenlings
-            # Entry('Scorpaeniformes Hexagrammidae', ['Greenling']),
-            Entry('Scorpaeniformes Hexagrammidae genus:Hexagrammos decagrammus', 'Kelp Greenling'),
-            Entry('Scorpaeniformes Hexagrammidae genus:Pleurogrammus monopterygius', 'Atka Mackerel'),
-            Entry('Scorpaeniformes Hexagrammidae genus:Ophiodon elongatus', 'Lingcod'),
+            TaxonomicEntry('Scorpaeniformes suborder:Hexagrammoidei family:Hexagrammidae', ['Hexagrammidae', 'unclassified greenling']),  # incorporates greenlings
+            TaxonomicEntry('Scorpaeniformes Hexagrammidae genus:Hexagrammos decagrammus', 'Kelp Greenling'),
+            TaxonomicEntry('Scorpaeniformes Hexagrammidae genus:Pleurogrammus monopterygius', 'Atka Mackerel'),
+            TaxonomicEntry('Scorpaeniformes Hexagrammidae genus:Ophiodon elongatus', 'Lingcod'),
+
+            # ---- NON FISH ---
+            TaxonomicEntry('phylum:Chordata Vertebrata class:Mammalia order:Primates family:Hominidae genus:Homo species:sapiens', 'human'),
+            TaxonomicEntry('phylum:Chordata class:Ascidiacea order:Aplousobranchia family:Didemnidae genus:Didemnum', 'Didemnum'),
+
+            TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda'),
+            TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura', 'unclassified crab'),
+
+            TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Cancer'),
+
+            NonStandardEntry('Cancer jonah_or_rock', 'jonah or rock crab', subclasses=['Cancer borealis', 'Cancer irroratus']),
+            TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Cancer borealis', 'jonah crab'),
+            TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Cancer irroratus', 'rock crab'),
+
+            TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Chionoecetes bairdi', ['tanner crab', 'bairdi crab', 'bairdi tanner crab']),
+            TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda family:Nephropidae', 'lobster'),
+            TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda family:Nephropidae genus:Homarus americanus', 'american lobster'),
+
+            NonStandardEntry('shrimp', 'unclassified shrimp', superclass='Decapoda', subclasses=['Pleocyemata', 'Dendrobranchiata', 'Caridea']),
+            # The commented entry is probably more correct, but breaks the tree structure (which may be ok, but lets make it a tree for now)
+            # NonStandardEntry('shrimp', 'unclassified shrimp', superclass='Decapoda', subclasses=['Dendrobranchiata', 'Caridea']),
+
+            TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda suborder:Dendrobranchiata', 'dendrobranchiata shrimp'),
+            TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda suborder:Pleocyemata infraorder:Caridea', 'caridean shrimp'),
+
+            TaxonomicEntry('phylum:Mollusca class:Cephalopoda order:Octopoda', 'unclassified octopus'),
+            TaxonomicEntry('phylum:Mollusca class:Cephalopoda order:Teuthida', 'unclassified squid'),
+            TaxonomicEntry('phylum:Mollusca class:Gastropoda', 'unclassified snail'),
+            TaxonomicEntry('phylum:Mollusca class:Gastropoda infraclass:Euthyneura superorder:Nudipleura order:Nudibranchia', ['Nudibranch', 'opistobranch sea slug']),
+            TaxonomicEntry('phylum:Mollusca class:Gastropoda family:Buccinidae genus:Buccinum undatum', 'waved whelk'),
+            TaxonomicEntry('phylum:Mollusca class:Bivalivia order:Osteroida family:Pectinidae', 'unclassified scallop'),
+            TaxonomicEntry('family:Pectinidae genus:Placopecten species:magellanicus', 'sea scallop'),
+
+            NonStandardEntry('genus:Placopecten magellanicus dead', 'dead sea scallop'),
+            NonStandardEntry('genus:Placopecten magellanicus dead clapper', 'sea scallop clapper'),
+            NonStandardEntry('genus:Placopecten magellanicus live', 'live sea scallop'),
+            NonStandardEntry('genus:Placopecten magellanicus live swimming', 'swimming sea scallop'),
+
+            # echinoderms
+            TaxonomicEntry('phylum:Echinodermata class:Holothuroidea genus:Psolus', 'sea cucumber'),
+            TaxonomicEntry('Psolus segregatus', 'segregatus sea cucumber', alias='Psolus squamatus', ncbi_taxid=NotImplemented),
+            # aphiaID=124713),
+            TaxonomicEntry('Echinodermata superclass:Asterozoa class:Asteroidea', 'unclassified starfish'),
+            TaxonomicEntry('Echinodermata superclass:Asterozoa class:Asteroidea genus:Rathbunaster californicus', 'californicus starfish'),
         ]
         if autoparse:
             self.parse_entries()
@@ -361,6 +392,7 @@ class LifeCatalog(object):
             >>> from viame_wrangler.lifetree import *  # NOQA
             >>> self = LifeCatalog(False)
             >>> self.parse_entries()
+            >>> self.draw()
         """
         dag = nx.DiGraph()
 
@@ -384,12 +416,21 @@ class LifeCatalog(object):
             dag.node[node_id]['common_names'] = old.union(new)
 
         # For each entry, parse the parts of the coded scientific name to build
-        # up the nodes in the tree structure.
-        for entry in tqdm.tqdm(self.entries):
-            print('entry = {!r}'.format(entry))
+        # up a directed graph structure. No need to ensure tree structure here
+        # we will algorithmically create the tree. Just specify super/subclass
+        # relationships
+        for entry in self.entries:
+            # print('entry = {!r}'.format(entry))
             node_id = entry.id
             dag.add_node(node_id)
             _setcommon(node_id, entry.common_names)
+
+            if entry.superclass:
+                dag.add_edge(entry.superclass, node_id)
+
+            if entry.subclasses:
+                for sub in entry.subclasses:
+                    dag.add_edge(node_id, sub)
 
             path = entry.partial_path()
             # handle one-node path
@@ -412,9 +453,10 @@ class LifeCatalog(object):
             try:
                 rank = node['rank']
             except KeyError:
-                print('Failed to parse rank')
-                print('node_id = {!r}'.format(node_id))
-                raise
+                rank = node['rank'] = 'null'
+                # print('Failed to parse rank')
+                # print('node_id = {!r}'.format(node_id))
+                # raise
 
             node['label'] = rank + ':' + node_id
             if common_names:
@@ -422,7 +464,7 @@ class LifeCatalog(object):
 
         assert nx.is_directed_acyclic_graph(dag)
         G = nx.algorithms.dag.transitive_reduction(dag)
-        assert nx.is_tree(G), 'should reduce to a tree'
+        # assert nx.is_tree(G), 'should reduce to a tree'
 
         # transfer node attributes
         for node_id, data in dag.nodes(data=True):
@@ -436,13 +478,104 @@ class LifeCatalog(object):
             entry.lineage = self.node_lineage(node_id)
             # print('entry.lineage = {}'.format(entry.lineage.code()))
 
+    def draw(self, fpath='classes.png'):
+        """
+        Dump the graph structure to disk using graphviz
+        """
+        from viame_wrangler import nx_helpers
+        self.G.graph['rankdir'] = 'LR'
+        nx_helpers.dump_nx_ondisk(self.G, fpath)
+
     def node_lineage(self, node_id):
         path = [node_id] + [e[1] for e in nx.bfs_edges(self.Gr, node_id)]
         lineage = ub.odict([(self.G.node[n]['rank'], n) for n in path][::-1])
         # db.lookup(lineage.id)
         return Lineage(lineage)
 
+    def reduce_paths(self):
+        """
+        Collapse non-branching paths with no support (requires freq attributes
+        to be set), into a single edge.
+
+        Example:
+            >>> from viame_wrangler.lifetree import *  # NOQA
+            >>> self = LifeCatalog()
+            >>> self.draw()
+            >>> self.reduce_paths()
+            >>> self.draw('reduced.png')
+        """
+        from networkx.algorithms.connectivity.edge_augmentation import collapse
+        def dfs_streaks(G):
+            """ Trace nonbranching paths with depth first search """
+            from viame_wrangler import nx_helpers
+            visited = set()
+            stack = [(None, nx_helpers.nx_source_nodes(G))]
+            streaks = []
+            streak = []
+
+            def on_visit(node):
+                din = G.in_degree[node]
+                dout = G.out_degree[node]
+                freq = G.node[node].get('freq', 0)
+                if din <= 1 and dout == 1 and freq == 0:
+                    # continue the streak
+                    streak.append(node)
+                else:
+                    # end the streak (possibly adding a final node)
+                    if din <= 1:
+                        streak.append(node)
+                    # if len(streak) > 1:
+                    streaks.append(streak.copy())
+                    streak.clear()
+
+            while stack:
+                parent, children = stack[-1]
+                try:
+                    child = next(children)
+                    if child not in visited:
+                        visited.add(child)
+                        on_visit(child)
+                        stack.append((child, iter(G[child])))
+                except StopIteration:
+                    stack.pop()
+            return streaks
+
+        G = self.G
+        # discover and collapse streaks
+        streaks = dfs_streaks(G)
+        n_to_streak = {n: s for s in streaks for n in s}
+        G2 = collapse(G, streaks)
+
+        # remap the collapsed names back to original names
+        n2_to_ns = ub.invert_dict(G2.graph['mapping'], False)
+        n2_to_ns = ub.map_vals(list, n2_to_ns)
+        n2_to_n = {n2: n_to_streak[ns[0]][-1] for n2, ns in n2_to_ns.items()}
+        G3 = nx.relabel_nodes(G2, n2_to_n)
+
+        # transfer data from the old to the new
+        for n in G3.nodes():
+            G3.node[n].update(G.node[n])
+        self.G = G3
+
+    def accumulate_frequencies(self):
+        """ Accumulate the frequency of each node along each path """
+        # Sum number of examples of each category
+        G = self.G
+        for node in G.nodes():
+            freq = G.node[node].get('freq', 0)
+            total = freq
+            for sub in list(nx.descendants(G, node)):
+                total += G.node[sub].get('freq', 0)
+            G.node[node]['total'] = total
+            if total:
+                G.node[node]['label'] = G.node[node]['label'] + '\nfreq={},total={}'.format(freq, total)
+
+    def remove_unsupported_nodes(self):
+        bad_nodes = [n for n, d in self.G.nodes(data=True) if d['total'] == 0]
+        self.G.remove_nodes_from(bad_nodes)
+
     def expand_lineages(self):
+        raise NotImplementedError('unfinished')
         # TODO: Try and use the NCBI database to find the rank and lineage
         # of items that were not given
         # TODO: walk the database and get the lineages
@@ -474,7 +607,7 @@ class LifeCatalog(object):
 
         nodeid_to_ncbi = {}
         for entry in self.entries:
-            if entry.ncbi_taxid is not NotImplementedError:
+            if entry.ncbi_taxid is not NotImplemented:
                 nodeid_to_ncbi[entry.id] = entry.ncbi_taxid
 
         ncbi_to_row = {}
@@ -483,7 +616,7 @@ class LifeCatalog(object):
                 G.add_node(row.tax_name)
                 print('NEW NODE tax_name = {!r}'.format(row.tax_name))
             G.nodes[row.tax_name]['ncbi_taxid'] = row.ncbi_taxid
-            ncbi_to_row[ncbi_taxid] = row
+            # ncbi_to_row[ncbi_taxid] = row
 
         def _lookup_from_taxid(ncbi_taxid):
             if ncbi_taxid is NotImplementedError:
@@ -527,31 +660,16 @@ class LifeCatalog(object):
         for node_id in tqdm.tqdm(list(G.nodes()), desc='lookup ncbi'):
             row = _lookup_from_nodeid(node_id)
 
-        for ncbi_taxid in tqdm.tqdm(list(nodeid_to_ncbi.values())):
-            if ncbi_taxid is not None:
-                row = _lookup(ncbi_taxid)
-                parent = _lookup(row.parent_taxid)
-                G.add_edge(parent.tax_name, row.tax_name)
+        # for ncbi_taxid in tqdm.tqdm(list(nodeid_to_ncbi.values())):
+        #     if ncbi_taxid is not None:
+        #         row = _lookup(ncbi_taxid)
+        #         parent = _lookup(row.parent_taxid)
+        #         G.add_edge(parent.tax_name, row.tax_name)
 
-                if parent.tax_name in G.nodes:
-                    G.node[parent.tax_name]['ncbi_taxid'] = row.parent_taxid
-                else:
-                    pass
-
-        def draw(self):
-            import plottool as pt
-            self.G.graph['rankdir'] = 'LR'
-            pt.dump_nx_ondisk(self.G, 'classes.png')
-
-            # agraph = nx.nx_agraph.to_agraph(G)
-            # agraph.layout(prog='dot')
-            # agraph.draw(ub.truepath('classes2.png'))
-            # G = dag
-            # G.graph['rankdir'] = 'LR'
-            # pt.dump_nx_ondisk(G, 'dag-classes.png')
-            # pt.qtensure()
-            # pt.show_nx(G, layoutkw={'prog': 'dot'}, arrow_width=.0001)
-        return G
+        #         if parent.tax_name in G.nodes:
+        #             G.node[parent.tax_name]['ncbi_taxid'] = row.parent_taxid
+        #         else:
+        #             pass
 
 
 class QueryGaurd(object):

@@ -5,6 +5,7 @@ import glob
 import ubelt as ub
 from coco_wrangler import CocoDataset, StratifiedGroupKFold
 from viame_wrangler.cats_2018 import get_coarse_mapping
+from viame_wrangler import cats_2018
 
 
 def setup_data():
@@ -73,6 +74,19 @@ def setup_data():
     merged.img_root = img_root
     # merged._run_fixes()
     # print(ub.repr2(merged.category_annotation_frequency()))
+
+    from viame_wrangler import lifetree
+    tree = lifetree.LifeCatalog(autoparse=True)
+    mapper = cats_2018.make_raw_category_mapping(merged, tree)
+    merged.coarsen_categories(mapper)
+
+    node_to_freq = merged.category_annotation_frequency()
+    for node in tree.G.nodes():
+        tree.G.node[node]['freq'] = node_to_freq.get(node, 0)
+    tree.accumulate_frequencies()
+    tree.remove_unsupported_nodes()
+    tree.reduce_paths()
+    tree.draw('classes-freq.png')
 
     merged.dump(join(challenge_work_dir, 'phase0-merged-raw.mscoco.json'))
 

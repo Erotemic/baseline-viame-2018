@@ -28,11 +28,9 @@ def normalize_name(name):
     return norm
 
 
-def normalize_categories(merged):
-    from viame_wrangler import lifetree
+def make_category_mapping(tree):
+    """ Create a mapping from category names to standard names """
     import networkx as nx
-    tree = lifetree.LifeCatalog(autoparse=True)
-
     common_name_to_node = {}
     node_to_common_names = nx.get_node_attributes(tree.G, 'common_names')
     for node_id, common_names in node_to_common_names.items():
@@ -48,13 +46,11 @@ def normalize_categories(merged):
             if norm.startswith('unclassified '):
                 norm3 = norm.replace('unclassified ', '')
                 common_name_to_node[norm3] = node_id
+    return common_name_to_node
 
-    # Hack in some special cats
-    common_name_to_node['negative'] = 'NonLiving'
-    common_name_to_node['scallop like rock'] = 'NonLiving'
-    common_name_to_node['dust cloud'] = 'NonLiving'
-    common_name_to_node['spc d'] = 'NonLiving'
 
+def make_raw_category_mapping(merged, tree):
+    common_name_to_node = make_category_mapping(tree)
     mapper = {}
     for cat in merged.cats.values():
         norm = normalize_name(cat['name'])
@@ -65,97 +61,19 @@ def normalize_categories(merged):
                     norm = norm[len('unclassified') + 1:]
             if 'unclassified ' + norm in common_name_to_node:
                 norm = 'unclassified ' + norm
-            if norm == 'unclassified shrimp' or norm == 'shrimp':
-                norm = 'caridean shrimp'
-            if 'sea scallop' in norm:
-                norm = norm.replace('live', '')
-                norm = norm.replace('dead', '')
-                norm = norm.replace('swimming', '')
-                norm = norm.replace('clapper', '')
-                norm = normalize_name(norm)
-            if 'jonah or rock crab' == norm:
-                norm = 'jonah crab'
+            # if norm == 'unclassified shrimp' or norm == 'shrimp':
+            #     norm = 'caridean shrimp'
+            # if 'sea scallop' in norm:
+            #     norm = norm.replace('live', '')
+            #     norm = norm.replace('dead', '')
+            #     norm = norm.replace('swimming', '')
+            #     norm = norm.replace('clapper', '')
+            #     norm = normalize_name(norm)
+            # if 'jonah or rock crab' == norm:
+            #     norm = 'jonah crab'
         node_id = common_name_to_node[norm]
         mapper[cat['name']] = node_id
-
-    merged.coarsen_categories(mapper)
-
-    # Get number of examples of each category
-    G = tree.G.copy()
-    node_to_freq = merged.category_annotation_frequency()
-    for node in G.nodes():
-        G.node[node]['freq'] = node_to_freq.get(node, 0)
-
-    # Sum number of examples of each category
-    for node in G.nodes():
-        freq = G.node[node].get('freq', 0)
-        total = freq
-        for sub in list(nx.descendants(G, node)):
-            total += G.node[sub].get('freq', 0)
-        G.node[node]['total'] = total
-        if total:
-            print('node = {!r}'.format(node))
-            print('total = {!r}'.format(total))
-            G.node[node]['label'] = G.node[node]['label'] + '\nfreq={},total={}'.format(freq, total)
-
-    bad_nodes = []
-    for node in G.nodes():
-        if G.node[node]['total'] == 0:
-            bad_nodes.append(node)
-    G.remove_nodes_from(bad_nodes)
-
-    from networkx.algorithms.connectivity.edge_augmentation import collapse
-
-    source = 'Physical'
-    def dfs_streaks(G, source):
-        visited = set()
-        # stack = [(source, iter(G[source]))]
-        stack = [(None, iter([source]))]
-
-        streaks = []
-        streak_cls = ub.oset
-        streak_cls = list
-        streak = streak_cls()
-
-        def on_visit(child):
-            nonlocal streak
-            if G.in_degree[child] <= 1 and G.out_degree[child] == 1 and G[child].get('freq', 0) == 0:
-                streak.append(child)
-            else:
-                if G.in_degree[child] <= 1:
-                    streak.append(child)
-                if len(streak) > 1:
-                    streaks.append(streak)
-                streak = streak_cls()
-
-        while stack:
-            parent, children = stack[-1]
-            try:
-                child = next(children)
-                if child not in visited:
-                    visited.add(child)
-                    on_visit(child)
-                    stack.append((child, iter(G[child])))
-            except StopIteration:
-                stack.pop()
-        return streaks
-
-    streaks = dfs_streaks(G, source)
-    n_to_streak = {n: s for s in streaks for n in s}
-    G2 = collapse(G, streaks)
-    reverse_map = ub.invert_dict(G2.graph['mapping'], False)
-    for n in G2.nodes():
-        subs = list(reverse_map[n])
-        if len(subs) == 1:
-            G2.node[n].update(G.node[subs[0]])
-        else:
-            n2 = n_to_streak[subs[0]][-1]
-            G2.node[n].update(G.node[n2])
-
-
-    import plottool as pt
-    G2.graph['rankdir'] = 'LR'
-    pt.dump_nx_ondisk(G2, 'classes-freq.png')
+    return mapper
 
 
 def get_coarse_mapping():
