@@ -1,128 +1,170 @@
 # -*- coding: utf-8 -*-
+"""
+hacks:
+    rsync -avp acidalia:/home/git/phase0-annotations.tar.gz ~/Downloads
+    rsync -avp acidalia:/home/git/noaa-full-datasets.tar.gz ~/Downloads
+
+    rm -rf ~/data/viame-challenge-2018/phase0-annotations
+    rm -rf ~/data/viame-challenge-2018/phase0-*.mscoco.json
+
+    tar xvzf ~/Downloads/phase0-annotations.tar.gz -C ~/data/viame-challenge-2018
+    ls ~/data/viame-challenge-2018
+
+    tar xvzf ~git/phase0-annotations-old-names.tar.gz -C ~/data/viame-challenge-2018
+    ls ~/data/viame-challenge-2018
+
+    tar xvzf ~/Downloads/noaa-full-datasets.tar.gz -C ~/data/viame-challenge-2018
+    ls ~/data/viame-challenge-2018
+
+Challenge Website:
+    http://www.viametoolkit.org/cvpr-2018-workshop-data-challenge/
+
+Challenge Download Data:
+    https://challenge.kitware.com/girder#collection/5a722b2c56357d621cd46c22/folder/5a9028a256357d0cb633ce20
+    * Groundtruth: phase0-annotations.tar.gz
+    * Images: phase0-imagery.tar.gz
+
+```
+CODE_DIR=$HOME/code
+DATA_DIR=$HOME/data
+WORK_DIR=$HOME/work
+
+mkdir -p $DATA_DIR/viame-challenge-2018
+tar xvzf $HOME/Downloads/phase0-annotations.tar.gz -C $DATA_DIR/viame-challenge-2018
+tar xvzf $HOME/Downloads/phase0-imagery.tar.gz -C $DATA_DIR/viame-challenge-2018
+```
+
+"""
 from __future__ import absolute_import, division, print_function, unicode_literals
 from os.path import join
 import glob
 import ubelt as ub
 from coco_wrangler import CocoDataset, StratifiedGroupKFold
-from viame_wrangler.cats_2018 import get_coarse_mapping
-from viame_wrangler import cats_2018
+import viame_wrangler.mappings
+
+
+class WrangleConfig(object):
+    def __init__(cfg):
+        cfg.work_dir = ub.truepath(ub.argval('--work', default='~/work'))
+        cfg.data_dir = ub.truepath(ub.argval('--data', default='~/data'))
+        cfg.challenge_data_dir = join(cfg.data_dir, 'viame-challenge-2018')
+        cfg.challenge_work_dir = join(cfg.work_dir, 'viame-challenge-2018')
+        ub.ensuredir(cfg.challenge_work_dir)
+
+
+def show_low_support_classes(dset):
+    """
+    dset = merged
+    coarse = merged
+    """
+    # aid = list(dset.anns.values())[0]['id']
+    # dset.show_annotation(aid)
+    dset._remove_keypoint_annotations()
+    gids = sorted([gid for gid, aids in dset.gid_to_aids.items() if aids])
+
+    catfreq = dset.category_annotation_frequency()
+    inspect_cids = []
+    for name, freq in catfreq.items():
+        if freq > 0 and freq < 50:
+            cid = dset.name_to_cat[name]['id']
+            inspect_cids.append(cid)
+    inspect_gids = list(set(ub.flatten(ub.take(dset.cid_to_gids, inspect_cids))))
+    # inspect_gids = [gid for gid in inspect_gids if 'habcam' not in dset.imgs[gid]['file_name']]
+
+    import utool as ut
+    if ut.inIPython():
+        import IPython
+        IPython.get_ipython().magic('pylab qt5 --no-import-all')
+
+    print('inspect_gids = {!r}'.format(inspect_gids))
+    from matplotlib import pyplot as plt
+    for gid in ut.InteractiveIter(inspect_gids):
+        img = dset.imgs[gid]
+        print('img = {}'.format(ub.repr2(img)))
+        aids = dset.gid_to_aids[gid]
+        primary_aid = None
+        anns = list(ub.take(dset.anns, aids))
+        for ann in anns:
+            ann = ann.copy()
+            ann['category'] = dset.cats[ann['category_id']]['name']
+            print('ann = {}'.format(ub.repr2(ann)))
+            if primary_aid is None:
+                if ann['category_id'] in inspect_cids:
+                    primary_aid = ann['id']
+
+        try:
+            fig = plt.figure(1)
+            fig.clf()
+            dset.show_annotation(primary_aid, gid=gid)
+            fig.canvas.draw()
+        except:
+            print('cannot draw')
+
+    # # import utool as ut
+    # for gid in gids:
+    #     fig = plt.figure(1)
+    #     fig.clf()
+    #     dset.show_annotation(gid=gid)
+    #     fig.canvas.draw()
 
 
 def setup_data():
-    """
-    hacks:
-        rsync -avpR acidalia:/home/git/phase0-annotations.tar.gz ~/Downloads
+    cfg = WrangleConfig()
 
-        rm -rf ~/data/viame-challenge-2018/phase0-annotations
-        rm -rf ~/data/viame-challenge-2018/phase0-*.mscoco.json
-
-        tar xvzf ~git/phase0-annotations-old-names.tar.gz -C ~/data/viame-challenge-2018
-        ls ~/data/viame-challenge-2018
-
-    Challenge Website:
-        http://www.viametoolkit.org/cvpr-2018-workshop-data-challenge/
-
-    Challenge Download Data:
-        https://challenge.kitware.com/girder#collection/5a722b2c56357d621cd46c22/folder/5a9028a256357d0cb633ce20
-        * Groundtruth: phase0-annotations.tar.gz
-        * Images: phase0-imagery.tar.gz
-
-    ```
-    CODE_DIR=$HOME/code
-    DATA_DIR=$HOME/data
-    WORK_DIR=$HOME/work
-
-    mkdir -p $DATA_DIR/viame-challenge-2018
-    tar xvzf $HOME/Downloads/phase0-annotations.tar.gz -C $DATA_DIR/viame-challenge-2018
-    tar xvzf $HOME/Downloads/phase0-imagery.tar.gz -C $DATA_DIR/viame-challenge-2018
-    ```
-
-    """
-    work_dir = ub.truepath(ub.argval('--work', default='~/work'))
-    data_dir = ub.truepath(ub.argval('--data', default='~/data'))
-    challenge_data_dir = join(data_dir, 'viame-challenge-2018')
-    challenge_work_dir = join(work_dir, 'viame-challenge-2018')
-    ub.ensuredir(challenge_work_dir)
-
-    img_root = join(challenge_data_dir, 'phase0-imagery')
-    # annot_dir = join(challenge_data_dir, 'phase0-annotations-old-names')
-    annot_dir = join(challenge_data_dir, 'phase0-annotations')
+    img_root = join(cfg.challenge_data_dir, 'phase0-imagery')
+    annot_dir = join(cfg.challenge_data_dir, 'phase0-annotations')
     fpaths = list(glob.glob(join(annot_dir, '*.json')))
-    # ignore the non-bounding box nwfsc and afsc datasets for now
-
-    # exclude = ('nwfsc', 'afsc', 'mouss', 'habcam')
-    # exclude = ('mbari',)
-    # fpaths = [p for p in fpaths if not basename(p).startswith(exclude)]
 
     print('Reading')
     dsets = []
     for fpath in fpaths:
-        dset = CocoDataset(fpath, autobuild=False)
-        # dset._run_fixes()
-        dset._build_index()
+        dset = CocoDataset(fpath)
         dsets.append(dset)
-
-        # print(ub.repr2([d['name'] for d in dset.cats.values()]))
-
-    for dset in dsets:
-        print(dset.img_root)
-        # print(ub.repr2(dset.basic_stats()))
-        print(ub.repr2(dset.category_annotation_frequency()))
 
     print('Merging')
     merged = CocoDataset.union(*dsets)
     merged.img_root = img_root
-    # merged._run_fixes()
-    # print(ub.repr2(merged.category_annotation_frequency()))
 
-    from viame_wrangler import lifetree
-    tree = lifetree.LifeCatalog(autoparse=True)
-    mapper = cats_2018.make_raw_category_mapping(merged, tree)
-    merged.coarsen_categories(mapper)
+    def ensure_heirarchy(dset, heirarchy):
+        for cat in heirarchy:
+            try:
+                dset.add_category(**cat)
+            except ValueError:
+                realcat = dset.name_to_cat[cat['name']]
+                realcat['supercategory'] = cat['supercategory']
 
-    node_to_freq = merged.category_annotation_frequency()
-    for node in tree.G.nodes():
-        tree.G.node[node]['freq'] = node_to_freq.get(node, 0)
-    tree.accumulate_frequencies()
-    tree.remove_unsupported_nodes()
-    tree.reduce_paths()
-    tree.draw('classes-freq.png')
-
-    merged.dump(join(challenge_work_dir, 'phase0-merged-raw.mscoco.json'))
-
+    ### FINE-GRAIND DSET  ###
+    fine = merged.copy()
+    FineGrainedChallenge = viame_wrangler.mappings.FineGrainedChallenge
+    fine.rename_categories(FineGrainedChallenge.raw_to_cat)
+    ensure_heirarchy(fine, FineGrainedChallenge.heirarchy)
+    fine.dump(join(cfg.challenge_work_dir, 'phase0-merged-fine-bbox-keypoint.mscoco.json'))
     if True:
-        # Cleanup the dataset
-        merged._remove_bad_annotations()
-        merged._remove_radius_annotations()
+        print(ub.repr2(fine.category_annotation_type_frequency(), nl=1, sk=1))
+        print(ub.repr2(fine.basic_stats()))
+    # remove keypoint annotations
+    # Should we remove the images that have keypoints in them?
+    fine_bbox = fine.copy()
+    fine_bbox._remove_keypoint_annotations()
+    fine_bbox.dump(join(cfg.challenge_work_dir, 'phase0-merged-fine-bbox.mscoco.json'))
 
-        merged._remove_keypoint_annotations()
-        merged._remove_empty_images()
+    ### COARSE DSET  ###
+    coarse = merged.copy()
+    CoarseChallenge = viame_wrangler.mappings.CoarseChallenge
+    coarse.rename_categories(CoarseChallenge.raw_to_cat)
+    ensure_heirarchy(coarse, CoarseChallenge.heirarchy)
+    print(ub.repr2(coarse.basic_stats()))
+    coarse.dump(join(cfg.challenge_work_dir, 'phase0-merged-coarse-bbox-keypoint.mscoco.json'))
+    if True:
+        print(ub.repr2(coarse.category_annotation_type_frequency(), nl=1, sk=1))
+        print(ub.repr2(coarse.basic_stats()))
+    # remove keypoint annotations
+    coarse_bbox = coarse.copy()
+    coarse_bbox._remove_keypoint_annotations()
+    coarse_bbox.dump(join(cfg.challenge_work_dir, 'phase0-merged-coarse-bbox.mscoco.json'))
 
-    print(ub.repr2(merged.category_annotation_frequency()))
-    print(sum(list(merged.category_annotation_frequency().values())))
 
-    # Remap to coarse categories
-    merged.coarsen_categories(get_coarse_mapping())
-    print(ub.repr2(merged.category_annotation_frequency()))
-    print(sum(list(merged.category_annotation_frequency().values())))
-
-    print(ub.repr2(merged.basic_stats()))
-
-    merged.dump(join(challenge_work_dir, 'phase0-merged-coarse.mscoco.json'))
-
-    if False:
-        # aid = list(merged.anns.values())[0]['id']
-        # merged.show_annotation(aid)
-        gids = sorted([gid for gid, aids in merged.gid_to_aids.items() if aids])
-        # import utool as ut
-        # for gid in ut.InteractiveIter(gids):
-        for gid in gids:
-            from matplotlib import pyplot as plt
-            fig = plt.figure(1)
-            fig.clf()
-            merged.show_annotation(gid=gid)
-            fig.canvas.draw()
-
+def make_test_train(merged):
     # Split into train / test  set
     print('Splitting')
     skf = StratifiedGroupKFold(n_splits=2)
@@ -149,17 +191,14 @@ def setup_data():
 
 
 def setup_detectron(train_dset, test_dset):
-    work_dir = ub.truepath(ub.argval('--work', default='~/work'))
-    data_dir = ub.truepath(ub.argval('--data', default='~/data'))
-    challenge_work_dir = join(work_dir, 'viame-challenge-2018')
-    ub.ensuredir(challenge_work_dir)
+    cfg = WrangleConfig()
 
     train_dset._ensure_imgsize()
     test_dset._ensure_imgsize()
 
     print('Writing')
-    train_dset.dump(join(challenge_work_dir, 'phase0-merged-train.mscoco.json'))
-    test_dset.dump(join(challenge_work_dir, 'phase0-merged-test.mscoco.json'))
+    train_dset.dump(join(cfg.challenge_work_dir, 'phase0-merged-train.mscoco.json'))
+    test_dset.dump(join(cfg.challenge_work_dir, 'phase0-merged-test.mscoco.json'))
 
     num_classes = len(train_dset.cats)
     print('num_classes = {!r}'.format(num_classes))
@@ -208,12 +247,12 @@ def setup_detectron(train_dset, test_dset):
     config_text = config_text.format(
         num_classes=num_classes,
     )
-    ub.writeto(join(challenge_work_dir, 'phase0-faster-rcnn.yaml'), config_text)
+    ub.writeto(join(cfg.challenge_work_dir, 'phase0-faster-rcnn.yaml'), config_text)
 
     docker_cmd = ('nvidia-docker run '
                   '-v {work_dir}:/work -v {data_dir}:/data '
                   '-it detectron:c2-cuda9-cudnn7 bash').format(
-                      work_dir=work_dir, data_dir=data_dir)
+                      work_dir=cfg.work_dir, data_dir=cfg.data_dir)
 
     train_cmd = ('python2 tools/train_net.py '
                  '--cfg /work/viame-challenge-2018/phase0-faster-rcnn.yaml '

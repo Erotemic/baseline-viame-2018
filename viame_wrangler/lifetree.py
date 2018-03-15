@@ -36,21 +36,39 @@ class Entry(ub.NiceRepr):
         parts = list(entry.parts)
         # The very last part might be a species
         path = []
-        for rank, value in parts[:-1]:
+        prev_rank = None
+        prev_value = None
+        for idx, (rank, value) in enumerate(parts):
+
+            if rank is None and prev_value is not None:
+                # check if this represents a species
+                if value.islower():
+                    if prev_rank == 'genus':
+                        rank = 'species'
+                if idx == len(parts) - 1:
+                    if value.islower():
+                        if prev_rank is None and prev_value[0].isupper():
+                            rank = 'species'
+
+            if rank == 'species':
+                value = '{} {}'.format(prev_value, value)
+
+            prev_rank = rank
+            prev_value = value
             path.append((rank, value))
 
-        rank, value = parts[-1]
-        if value.islower() or rank == 'species':
-            assert value.islower(), 'species is lowercase'
-            assert rank is None or rank == 'species'
-            assert len(parts) > 1, '{}'.format(entry.parts)
-            rank2, value2 = parts[-2]
-            assert rank2 is None or rank2 == 'genus'
-            assert value2
-            path.append(('species', '{} {}'.format(value2, value)))
-        else:
-            assert value[0].isupper()
-            path.append((rank, value))
+        # rank, value = parts[-1]
+        # if value.islower() or rank == 'species':
+        #     assert value.islower(), 'species is lowercase'
+        #     assert rank is None or rank == 'species'
+        #     assert len(parts) > 1, '{}'.format(entry.parts)
+        #     rank2, value2 = parts[-2]
+        #     assert rank2 is None or rank2 == 'genus'
+        #     assert value2
+        #     path.append(('species', '{} {}'.format(value2, value)))
+        # else:
+        #     assert value[0].isupper()
+        #     path.append((rank, value))
         return path
 
     @property
@@ -71,9 +89,9 @@ class NonStandardEntry(Entry):
         super().__init__(*args, **kwargs)
         entry.ncbi_taxid = NotImplemented
 
-    def partial_path(entry):
-        # Infer what we can about the ranks of each part in the code
-        return list(entry.parts)
+    # def partial_path(entry):
+    #     # Infer what we can about the ranks of each part in the code
+    #     return list(entry.parts)
 
 
 class TaxonomicEntry(Entry):
@@ -224,11 +242,11 @@ class LifeCatalog(object):
 
             # --- NON LIVING ---
             NonStandardEntry('Physical NonLiving', ['negative']),
-            NonStandardEntry('Physical NonLiving rock', ['scallop like rock']),
+            NonStandardEntry('Physical NonLiving Rock', ['scallop like rock']),
             NonStandardEntry('Physical NonLiving DustCloud', ['dust cloud']),
 
             # --- HIGH LEVEL LIVING ---
-            NonStandardEntry('domain:Eukarya', ['spc d'], superclass='Physical'),
+            NonStandardEntry('domain:Eukarya', superclass='Physical'),
 
             TaxonomicEntry('domain:Eukarya kingdom:Animalia phylum:Chordata', 'cordate'),
             TaxonomicEntry('domain:Eukarya kingdom:Animalia phylum:Chordata subphylum:Vertebrata', 'vertebrate', ncbi_taxid=7742),
@@ -265,8 +283,11 @@ class LifeCatalog(object):
             TaxonomicEntry('order:Lophiiformes family:Lophius', 'unclassified monkfish'),
             TaxonomicEntry('order:Rajiformes family:Rajidae', 'unclassified skate'),
             TaxonomicEntry('order:Rajiformes family:Rajidae genus:Dipturus species:oxyrinchus', 'longnose skate'),
+
             TaxonomicEntry('order:Carcharhiniformes family:Carcharhinidae', 'requiem shark'),
             TaxonomicEntry('order:Carcharhiniformes family:Carcharhinidae genus:Carcharhinus plumbeus', 'sandbar shark'),
+            TaxonomicEntry('order:Carcharhiniformes family:Carcharhinidae genus:Carcharhinus amblyrhynchos', 'Grey reef shark'),
+
             TaxonomicEntry('order:Osmeriformes family:Osmeridae', 'unclassified Smelt'),
 
             TaxonomicEntry('Perciformes family:Pholidichthyidae genus:Pholidichthys leucotaenia', 'convict worm'),
@@ -291,7 +312,7 @@ class LifeCatalog(object):
             TaxonomicEntry('Gadiformes family:Merlucciidae genus:Merluccius productus', 'north pacific hake'),
             TaxonomicEntry('Gadiformes family:Gadidae genus:Pollachius', 'Pollock'),
             TaxonomicEntry('Gadiformes family:Gadidae', 'unclassified Gadoid'),
-            TaxonomicEntry('Gadiformes family:Gadidae genus:Gadus macrocephalus', 'Pacific Cod'),
+            TaxonomicEntry('Gadiformes family:Gadidae genus:Gadus macrocephalus', ['Pacific Cod', 'spc d']),
 
             # rockfish
             TaxonomicEntry('Scorpaeniformes family:Sebastidae genus:Sebastes', ['unidentified rockfish', 'sebastes_2species', 'unclassified Sebastomus', 'wsr/Sebastomus']),
@@ -342,7 +363,7 @@ class LifeCatalog(object):
 
             TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Cancer'),
 
-            NonStandardEntry('Cancer jonah_or_rock', 'jonah or rock crab', subclasses=['Cancer borealis', 'Cancer irroratus']),
+            NonStandardEntry('Cancer null:jonah_or_rock_crab', 'jonah or rock crab', subclasses=['Cancer borealis', 'Cancer irroratus']),
             TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Cancer borealis', 'jonah crab'),
             TaxonomicEntry('phylum:Arthropoda subphylum:Crustacea class:Malacostraca order:Decapoda infraorder:Brachyura genus:Cancer irroratus', 'rock crab'),
 
@@ -365,20 +386,31 @@ class LifeCatalog(object):
             TaxonomicEntry('phylum:Mollusca class:Bivalivia order:Osteroida family:Pectinidae', 'unclassified scallop'),
             TaxonomicEntry('family:Pectinidae genus:Placopecten species:magellanicus', 'sea scallop'),
 
-            NonStandardEntry('genus:Placopecten magellanicus dead', 'dead sea scallop'),
-            NonStandardEntry('genus:Placopecten magellanicus dead clapper', 'sea scallop clapper'),
-            NonStandardEntry('genus:Placopecten magellanicus live', 'live sea scallop'),
-            NonStandardEntry('genus:Placopecten magellanicus live swimming', 'swimming sea scallop'),
+            NonStandardEntry('genus:Placopecten species:magellanicus scallopdead', 'dead sea scallop'),
+            NonStandardEntry('genus:Placopecten species:magellanicus scallopdead scallopclapper', 'sea scallop clapper'),
+            NonStandardEntry('genus:Placopecten species:magellanicus scalloplive', 'live sea scallop'),
+            NonStandardEntry('genus:Placopecten species:magellanicus scalloplive scallopswimming', 'swimming sea scallop'),
 
             # echinoderms
             TaxonomicEntry('phylum:Echinodermata class:Holothuroidea genus:Psolus', 'sea cucumber'),
+
+            TaxonomicEntry('Echinodermata class:Echinoidea order:Camarodonta family:Strongylocentrotidae genus:Strongylocentrotus fragilis',
+                           'fragilis sea urchin', alias='Allocentrotus fragilis'),
+            TaxonomicEntry('Echinodermata class:Anthozoa order:Actiniaria family:Actinostolidae',
+                           'Actinostolidae sea anemony'),
+
             TaxonomicEntry('Psolus segregatus', 'segregatus sea cucumber', alias='Psolus squamatus', ncbi_taxid=NotImplemented),
             # aphiaID=124713),
             TaxonomicEntry('Echinodermata superclass:Asterozoa class:Asteroidea', 'unclassified starfish'),
-            TaxonomicEntry('Echinodermata superclass:Asterozoa class:Asteroidea genus:Rathbunaster californicus', 'californicus starfish'),
+            TaxonomicEntry('Echinodermata superclass:Asterozoa class:Asteroidea order:Valvatida family:Goniasteridae genus:Mediaster aequalis', 'vermilion sea star'),
+            TaxonomicEntry('Echinodermata superclass:Asterozoa class:Asteroidea order:Forcipulatida family:Asteriidae genus:Rathbunaster californicus', 'californicus starfish'),
         ]
         if autoparse:
             self.parse_entries()
+
+    def copy(self):
+        import copy
+        return copy.deepcopy(self)
 
     def parse_entries(self):
         r"""
@@ -411,8 +443,8 @@ class LifeCatalog(object):
                     common_names = [common_names]
             else:
                 common_names = []
-            old =  dag.node[node_id].get('common_names', set())
-            new = {c.lower() for c in common_names}
+            old =  dag.node[node_id].get('common_names', ub.oset())
+            new = ub.oset([c.lower() for c in common_names])
             dag.node[node_id]['common_names'] = old.union(new)
 
         # For each entry, parse the parts of the coded scientific name to build
@@ -446,22 +478,6 @@ class LifeCatalog(object):
                 if vrank:
                     _setrank(v, vrank)
 
-        # Populate node attributes
-        for node_id in dag.nodes():
-            node = dag.node[node_id]
-            common_names = list(node.get('common_names', []))
-            try:
-                rank = node['rank']
-            except KeyError:
-                rank = node['rank'] = 'null'
-                # print('Failed to parse rank')
-                # print('node_id = {!r}'.format(node_id))
-                # raise
-
-            node['label'] = rank + ':' + node_id
-            if common_names:
-                node['label'] = node['label'] + '\n' + ub.repr2(common_names, nl=0)
-
         assert nx.is_directed_acyclic_graph(dag)
         G = nx.algorithms.dag.transitive_reduction(dag)
         # assert nx.is_tree(G), 'should reduce to a tree'
@@ -472,11 +488,33 @@ class LifeCatalog(object):
         self.G = G
         self.Gr = G.reverse()
 
+        self.popluate_node_labels()
+
         # Find the full lineage of each entry
-        for entry in self.entries:
-            node_id = entry.id
-            entry.lineage = self.node_lineage(node_id)
-            # print('entry.lineage = {}'.format(entry.lineage.code()))
+        # for entry in self.entries:
+        #     node_id = entry.id
+        #     entry.lineage = self.node_lineage(node_id)
+        #     # print('entry.lineage = {}'.format(entry.lineage.code()))
+
+    def popluate_node_labels(self, G=None):
+        if G is None:
+            G = self.G
+        # Populate node attributes
+        for node_id in G.nodes():
+            node = G.node[node_id]
+            common_names = list(node.get('common_names', []))
+            rank = node.get('rank', 'null')
+            node['label'] = rank + ':' + node_id
+            if common_names:
+                common_rep = ub.repr2(common_names, nl=0)
+                import textwrap
+                common_rep = '\n'.join(textwrap.wrap(common_rep))
+                node['label'] = node['label'] + '\n' + common_rep
+
+            total = node.get('total', None)
+            if total is not None:
+                freq = node.get('freq', 0)
+                node['label'] = node['label'] + '\nfreq={},total={}'.format(freq, total)
 
     def draw(self, fpath='classes.png'):
         """
@@ -484,6 +522,36 @@ class LifeCatalog(object):
         """
         from viame_wrangler import nx_helpers
         self.G.graph['rankdir'] = 'LR'
+
+        rank_to_color = {
+            'life': '#5465FD',
+            'domain': '#54B4FE',
+            'kingdom': '#59FEFA',
+            'phylum': '#5AFEA5',
+            'subphylum': '#5AFEA5',
+
+            'superclass': '#5CFD57',
+            'class': '#5CFD57',
+
+            'order': '#B2FF5B',
+            'infraorder': '#B2FF5B',
+            'suborder': '#B2FF5B',
+
+            'superfamily': '#FEFE48',
+            'family': '#FEFE48',
+
+            'genus': '#FEBB75',
+            'species': '#ECAF83',
+
+            'null': '#EEEEEE',
+        }
+
+        for n, data in self.G.nodes(data=True):
+            rank = data.get('rank', 'null')
+            if rank in rank_to_color:
+                data['fillcolor'] = rank_to_color[rank]
+                data['style'] = 'filled'
+
         nx_helpers.dump_nx_ondisk(self.G, fpath)
 
     def node_lineage(self, node_id):
@@ -504,7 +572,6 @@ class LifeCatalog(object):
             >>> self.reduce_paths()
             >>> self.draw('reduced.png')
         """
-        from networkx.algorithms.connectivity.edge_augmentation import collapse
         def dfs_streaks(G):
             """ Trace nonbranching paths with depth first search """
             from viame_wrangler import nx_helpers
@@ -524,8 +591,8 @@ class LifeCatalog(object):
                     # end the streak (possibly adding a final node)
                     if din <= 1:
                         streak.append(node)
-                    # if len(streak) > 1:
-                    streaks.append(streak.copy())
+                    if len(streak) > 1:
+                        streaks.append(streak.copy())
                     streak.clear()
 
             while stack:
@@ -540,22 +607,109 @@ class LifeCatalog(object):
                     stack.pop()
             return streaks
 
-        G = self.G
         # discover and collapse streaks
-        streaks = dfs_streaks(G)
+        streaks = dfs_streaks(self.G)
+        self.collapse(streaks)
+
+        # The dfs streak algorithm misses a corner case that would require a
+        # bit more state to handle, but we can do a simple postprocessing to
+        # fix it.
+
+        if 1:
+            for n in list(nx.topological_sort(self.G)):
+                d = self.G.node[n]
+                if d['freq'] == 0:
+                    din = self.G.in_degree[n]
+                    if din == 1:
+                        p = list(self.G.pred[n])[0]
+                        if self.G.out_degree[p] == 1:
+                            # merge n into p.
+                            self.contract(p, n)
+                            pass
+
+        self.popluate_node_labels()
+
+    def collapse_descendants(self, node):
+        self.collapse([list(nx.descendants(self.G, node)) + [node]])
+
+    def collapse(self, streaks):
+        """
+        The last node in each group is the one that others are collapsed into
+
+        self = tree1
+        streaks = groups
+        """
+        from networkx.algorithms.connectivity.edge_augmentation import collapse
         n_to_streak = {n: s for s in streaks for n in s}
-        G2 = collapse(G, streaks)
+        G = self.G
+        G2 = collapse(self.G, streaks)
 
         # remap the collapsed names back to original names
         n2_to_ns = ub.invert_dict(G2.graph['mapping'], False)
-        n2_to_ns = ub.map_vals(list, n2_to_ns)
-        n2_to_n = {n2: n_to_streak[ns[0]][-1] for n2, ns in n2_to_ns.items()}
+        n2_to_n = dict()
+        for n2, ns in n2_to_ns.items():
+            if len(ns) > 1:
+                n = n_to_streak[list(ns)[0]][-1]
+            else:
+                n = list(ns)[0]
+            n2_to_n[n2] = n
         G3 = nx.relabel_nodes(G2, n2_to_n)
 
         # transfer data from the old to the new
         for n in G3.nodes():
+            # transfer primary attributes
             G3.node[n].update(G.node[n])
+
+            # Collect all subattributes
+            common_names = G3.node[n].get('common_names', ub.oset())
+            # print('common_names = {!r}'.format(common_names))
+            freq = G3.node[n].get('freq', 0)
+            members = n2_to_ns[G2.graph['mapping'][n]]
+            for m in members:
+                if m != n:
+                    other = G.node[m].get('common_names', ub.oset())
+                    common_names.extend(other)
+                    freq += G.node[m].get('freq', 0)
+            # print('n = {!r}'.format(n))
+            # print('common_names = {!r}'.format(common_names))
+            G3.node[n]['common_names'] = common_names
+            G3.node[n]['freq'] = freq
         self.G = G3
+        self.popluate_node_labels()
+
+    def contract(self, p, n):
+        # update frequency, common_names, and merge n into p.
+        common_names = self.G.node[n].get('common_names', ub.oset())
+        freq = self.G.node[n].get('freq', 0)
+        self.G = nx.contracted_nodes(self.G, p, n, self_loops=False)
+        if 'common_names' not in self.G.node[p]:
+            self.G.node[p]['common_names'] = ub.oset()
+        self.G.node[p]['common_names'].extend(common_names)
+        self.G.node[p]['freq'] += freq
+
+    def remove_all_freq0_nodes(self):
+        for n, d in list(self.G.nodes(data=True)):
+            if self.G.node[n]['freq'] == 0:
+                parents = list(self.G.pred[n])
+                if len(parents):
+                    p = parents[0]
+                    self.contract(p, n)
+                else:
+                    self.G.remove_node(n)
+
+    def collapse_low_support(self, thresh=100):
+        """
+        make a coarser categorization by collapsing fine-grained categories
+        based on the available support.
+        """
+        for n, d in list(self.G.nodes(data=True)):
+            if d['total'] < thresh:
+                # print(n)
+                parents = list(self.G.pred[n])
+                assert len(parents) == 1
+                p = parents[0]
+                self.contract(p, n)
+        self.popluate_node_labels()
 
     def accumulate_frequencies(self):
         """ Accumulate the frequency of each node along each path """
@@ -567,8 +721,9 @@ class LifeCatalog(object):
             for sub in list(nx.descendants(G, node)):
                 total += G.node[sub].get('freq', 0)
             G.node[node]['total'] = total
-            if total:
-                G.node[node]['label'] = G.node[node]['label'] + '\nfreq={},total={}'.format(freq, total)
+            # if total:
+            #     G.node[node]['label'] = G.node[node]['label'] + '\nfreq={},total={}'.format(freq, total)
+        self.popluate_node_labels()
 
     def remove_unsupported_nodes(self):
         bad_nodes = [n for n, d in self.G.nodes(data=True) if d['total'] == 0]

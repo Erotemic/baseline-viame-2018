@@ -15,6 +15,13 @@ import ubelt as ub
 import six
 
 
+def annot_type(ann):
+    """
+    Returns what type of annotation `ann` is.
+    """
+    return tuple(sorted(set(ann) & {'bbox', 'line', 'keypoints'}))
+
+
 class CocoDataset(ub.NiceRepr):
     """
 
@@ -95,6 +102,13 @@ class CocoDataset(ub.NiceRepr):
 
         if autobuild:
             self._build_index()
+
+    def copy(self):
+        import copy
+        new = copy.copy(self)
+        new.dataset = copy.deepcopy(self.dataset)
+        new._build_index()
+        return new
 
     def __nice__(self):
         parts = []
@@ -431,6 +445,24 @@ class CocoDataset(ub.NiceRepr):
                                              key=lambda kv: kv[1]))
         return catname_to_nannots
 
+    def category_annotation_type_frequency(self):
+        """
+        Reports the number of annotations of each type for each category
+
+        Example:
+            >>> dataset = demo_coco_data()
+            >>> self = CocoDataset(dataset, tag='demo')
+            >>> hist = self.category_annotation_frequency()
+            >>> print(ub.repr2(hist))
+        """
+        catname_to_nannot_types = {}
+        for cid, aids in self.cid_to_aids.items():
+            name = self.cats[cid]['name']
+            hist = ub.dict_hist(map(annot_type, ub.take(self.anns, aids)))
+            catname_to_nannot_types[name] = ub.map_keys(
+                lambda k: k[0] if len(k) == 1 else k, hist)
+        return catname_to_nannot_types
+
     def basic_stats(self):
         """
         Reports number of images, annotations, and categories.
@@ -451,7 +483,7 @@ class CocoDataset(ub.NiceRepr):
             ('n_cats', len(self.dataset['categories'])),
         ])
 
-    def coarsen_categories(self, mapper):
+    def rename_categories(self, mapper):
         """
         Create a coarser categorization
 
@@ -660,6 +692,32 @@ class CocoDataset(ub.NiceRepr):
         for img in to_remove:
             self.dataset['images'].remove(img)
         self._build_index()
+
+    def add_category(self, name, supercategory=None):
+        if name in self.name_to_cat:
+            raise ValueError(name)
+        else:
+            def unused_cid():
+                # Find an unused category id
+                import itertools as it
+                for i in it.count(len(self.cats) + 1):
+                    if i not in self.cats:
+                        return i
+            cid = unused_cid()
+            cat = ub.odict()
+            cat['id'] = cid
+            cat['name'] = name
+            if supercategory:
+                cat['supercategory'] = supercategory
+
+            # Add to raw data structure
+            self.dataset['categories'].append(cat)
+
+            # And add to the indexes
+            self.cats[cid] = cat
+            self.cid_to_gids[cid] = []
+            self.cid_to_aids[cid] = []
+            self.name_to_cat[name] = cat
 
 
 def demo_coco_data():

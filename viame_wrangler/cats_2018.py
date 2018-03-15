@@ -5,6 +5,7 @@ import re
 def normalize_name(name):
     # norm = custom_fine_grained_map.get(name, name).lower()
     norm = name.lower()
+    norm = re.sub('[0-9 ]*:', '', norm)
     norm = norm.replace(' (less than half)', '')
     norm = norm.replace('probable', '')
     norm = norm.replace('probably', '')
@@ -49,7 +50,7 @@ def make_category_mapping(tree):
     return common_name_to_node
 
 
-def make_raw_category_mapping(merged, tree):
+def make_raw_category_mapping(merged, tree, tree1=None):
     common_name_to_node = make_category_mapping(tree)
     mapper = {}
     for cat in merged.cats.values():
@@ -72,6 +73,16 @@ def make_raw_category_mapping(merged, tree):
             # if 'jonah or rock crab' == norm:
             #     norm = 'jonah crab'
         node_id = common_name_to_node[norm]
+
+        if tree1:
+            # if a second tree is given, it specifies a coarsened mapping
+            # so find the finest-common node between tree and tree1
+            try:
+                while node_id not in tree1.G.nodes:
+                    node_id = list(tree.G.pred[node_id])[0]
+            except IndexError:
+                print('Cant map {}'.format(cat['name']))
+
         mapper[cat['name']] = node_id
     return mapper
 
