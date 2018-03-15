@@ -5,7 +5,7 @@ import ubelt as ub
 import coco_wrangler
 import viame_wrangler
 
-DRAW = False
+DRAW = True
 
 
 class WrangleConfig(object):
@@ -96,9 +96,11 @@ def define_fine_challenge_categories():
             cats2 += [{
                 'name': n,
             }]
+    cats2 = sorted(cats2, key=lambda c: c['name'])
+
     if 1:
-        print('Fine-Grained Classification Grouping')
-        print(ub.repr2(ub.invert_dict(mapper2, False)))
+        # print('Fine-Grained Classification Grouping')
+        # print(ub.repr2(ub.invert_dict(mapper2, False)))
         print('Fine-Grained Classification Class Frequency')
         print(ub.repr2(merged2.category_annotation_frequency()))
         print('Fine-Grained Classification Annotation Type Frequency')
@@ -166,10 +168,11 @@ def define_coarse_challenge_categories():
             cats1 += [{
                 'name': n,
             }]
+    cats1 = sorted(cats1, key=lambda c: c['name'])
 
-    if 0:
-        print('Coarse Classification Grouping')
-        print(ub.repr2(ub.invert_dict(mapper1, False)))
+    if 1:
+        # print('Coarse Classification Grouping')
+        # print(ub.repr2(ub.invert_dict(mapper1, False)))
         print('Coarse Classification Class Frequency')
         print(ub.repr2(merged1.category_annotation_frequency()))
         print('Coarse Classification Annotation Type Frequency')
@@ -200,6 +203,9 @@ def main():
             coarse = raw_to_coarse_cat[raw]
             fine_to_coarse_cat[fine] = coarse
 
+    print(ub.repr2(ub.invert_dict(raw_to_fine_cat, False)))
+    print(ub.repr2(ub.invert_dict(raw_to_coarse_cat, False)))
+
     # Write a python file that contains coarse mappings
     text = ub.codeblock(
         '''
@@ -225,7 +231,7 @@ def main():
     import autopep8
     pep8_options = {}
     new_text = autopep8.fix_code(text, pep8_options)
-    print(new_text)
+    # print(new_text)
     ub.writeto(join(dirname(viame_wrangler.__file__), 'mappings.py'), new_text)
 
 
