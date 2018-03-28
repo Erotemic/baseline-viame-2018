@@ -59,7 +59,13 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
             self._load_annotation(index)
 
         for index in ub.ProgIter(range(len(self))):
-            self._load_image(index)
+
+        self = TorchCocoDataset()
+        for index in ub.ProgIter(range(1353, len(self))):
+            try:
+                self._load_image(index)
+            except IOError as ex:
+                print('ex = {!r}\n'.format(ex))
 
     """
     def __init__(self, coco_fpath=None, img_root=None):
@@ -188,6 +194,11 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         img = self.dset.dataset['images'][index]
         gpath = join(self.dset.img_root, img['file_name'])
         imbgr = cv2.imread(gpath)
+        if imbgr is None:
+            if not os.path.exists(gpath):
+                raise IOError('Image path {} does not exist!'.format(gpath))
+            else:
+                raise IOError('Error reading image path {}'.format(gpath))
 
         if 'habcam' in gpath:
             # HACK: habcam images are stereo and we only have annots for the
