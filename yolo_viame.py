@@ -3,6 +3,8 @@ Train a baseline model using a pytorch implementation of YOLO2
 
 Ignore:
     rsync -avzP ~/data/./viame-challenge-2018/phase0-imagery hermes:data/viame-challenge-2018/
+    rsync -avzP ~/data/viame-challenge-2018/phase0-imagery/./mbari_seq0 hermes:data/viame-challenge-2018/phase0-imagery
+    rsync -avzP ~/data/viame-challenge-2018/phase0-imagery/./mouss_seq1 hermes:data/viame-challenge-2018/phase0-imagery
 """
 import os
 from os.path import join
@@ -50,7 +52,6 @@ class DataConfig(object):
 class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
     """
     Example:
-
         >>> self = TorchCocoDataset()
         >>> index = 139
 
@@ -58,14 +59,16 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         for index in ub.ProgIter(range(len(self))):
             self._load_annotation(index)
 
-        for index in ub.ProgIter(range(len(self))):
+        self.check_images_exist()
 
         self = TorchCocoDataset()
-        for index in ub.ProgIter(range(1353, len(self))):
+        for index in ub.ProgIter(range(len(self))):
             try:
                 self._load_image(index)
             except IOError as ex:
                 print('ex = {!r}\n'.format(ex))
+
+        img = self.dset.dataset['images'][index]
 
     """
     def __init__(self, coco_fpath=None, img_root=None):
@@ -88,6 +91,26 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
 
         self.num_classes = len(self.label_names)
         self.input_id = os.path.basename(self.coco_fpath)
+
+    def check_images_exist(self):
+        """
+        Example:
+            >>> cfg = DataConfig.phase0()
+            >>> workdir = cfg.workdir
+            >>> self = YoloCocoDataset(cfg.train_fpath)
+            >>> self.check_images_exist()
+            >>> self.YoloCocoDataset(cfg.vali_fapth)
+            >>> self.check_images_exist()
+        """
+        bad_paths = []
+        for index in ub.ProgIter(range(len(self))):
+            img = self.dset.dataset['images'][index]
+            gpath = join(self.dset.img_root, img['file_name'])
+            if not os.path.exists(gpath):
+                bad_paths.append((index, gpath))
+        if bad_paths:
+            print(ub.repr2(bad_paths, nl=1))
+            raise AssertionError('missing images')
 
     def __nice__(self):
         return '{} {}'.format(self.input_id, len(self))

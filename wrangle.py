@@ -44,6 +44,25 @@ import viame_wrangler
 import viame_wrangler.mappings
 
 
+def check_images():
+    cfg = viame_wrangler.config.WrangleConfig()
+    import os
+
+    annot_dir = cfg.annot_dir
+    fpaths = list(glob.glob(join(annot_dir, '*.json')))
+
+    print('Reading raw mscoco files')
+    for fpath in fpaths:
+        print('reading fpath = {!r}'.format(fpath))
+        dset = CocoDataset(fpath)
+        # dset.img_root = img_root
+
+        for img in dset.imgs.values():
+            path = join(cfg.img_root, dset.img_root, img['file_name'])
+            if not os.path.exists(path):
+                print(path)
+
+
 def setup_data():
     """
     Create final MSCOCO training files for the 4 challenge types:
