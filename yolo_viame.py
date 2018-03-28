@@ -97,9 +97,9 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         Example:
             >>> cfg = DataConfig.phase0()
             >>> workdir = cfg.workdir
-            >>> self = YoloCocoDataset(cfg.train_fpath)
+            >>> self = YoloCocoDataset(cfg.train_fpath, cfg.img_root)
             >>> self.check_images_exist()
-            >>> self.YoloCocoDataset(cfg.vali_fapth)
+            >>> self = YoloCocoDataset(cfg.vali_fapth, cfg.img_root)
             >>> self.check_images_exist()
         """
         bad_paths = []
@@ -442,8 +442,8 @@ def setup_harness():
     cfg = DataConfig.phase0()
     workdir = cfg.workdir
     datasets = {
-        'train': YoloCocoDataset(cfg.train_fpath),
-        'vali': YoloCocoDataset(cfg.vali_fapth),
+        'train': YoloCocoDataset(cfg.train_fpath, cfg.img_root),
+        'vali': YoloCocoDataset(cfg.vali_fapth, cfg.img_root),
     }
 
     n_cpus = psutil.cpu_count(logical=True)
@@ -666,7 +666,7 @@ def setup_harness():
 
 def train():
     """
-    python ~/code/baseline-viame-2018/yolo.py train
+    python ~/code/baseline-viame-2018/yolo.py train --nice phase0 --phase=0
     """
     harn = setup_harness()
     with harn.xpu:
