@@ -41,8 +41,7 @@ class DataConfig(object):
         other = viame_wrangler.config.WrangleConfig()
 
         cfg = DataConfig()
-        cfg.datadir = other.data_dir
-        cfg.workdir = other.work_dir
+        cfg.workdir = other.challenge_work_dir
         cfg.img_root = other.img_root
         cfg.train_fpath = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-train.mscoco.json')
         cfg.vali_fapth = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-val.mscoco.json')
@@ -345,7 +344,28 @@ class YoloCocoDataset(TorchCocoDataset):
             inp_size = self.base_size
 
         # load the raw data
-        hwc255, boxes, gt_classes = self._load_item(index, inp_size)
+        # hwc255, boxes, gt_classes = self._load_item(index, inp_size)
+
+        # load the raw data from VOC
+        image = self._load_image(index)
+        annot = self._load_annotation(index)
+
+        # VOC loads annotations in tlbr, but yolo expects xywh
+        tlbr = annot['boxes'].astype(np.float32)
+        gt_classes = annot['gt_classes']
+
+        # Weight samples so we dont care about difficult cases
+        gt_weights = np.ones(len(tlbr))
+
+        # squish the bounding box and image into a standard size
+        w, h = inp_size
+        im_w, im_h = image.shape[0:2][::-1]
+        sx = float(w) / im_w
+        sy = float(h) / im_h
+        tlbr[:, 0::2] *= sx
+        tlbr[:, 1::2] *= sy
+        interpolation = cv2.INTER_AREA if (sx + sy) <= 2 else cv2.INTER_CUBIC
+        hwc255 = cv2.resize(image, (w, h), interpolation=interpolation)
 
         if self.augmenter:
             # Ensure the same augmentor is used for bboxes and iamges
@@ -355,17 +375,25 @@ class YoloCocoDataset(TorchCocoDataset):
 
             bbs = ia.BoundingBoxesOnImage(
                 [ia.BoundingBox(x1, y1, x2, y2)
-                 for x1, y1, x2, y2 in boxes], shape=hwc255.shape)
+                 for x1, y1, x2, y2 in tlbr], shape=hwc255.shape)
             bbs = seq_det.augment_bounding_boxes([bbs])[0]
 
-            boxes = np.array([[bb.x1, bb.y1, bb.x2, bb.y2]
+            tlbr = np.array([[bb.x1, bb.y1, bb.x2, bb.y2]
                               for bb in bbs.bounding_boxes])
-            boxes = yolo_utils.clip_boxes(boxes, hwc255.shape[0:2])
+            tlbr = yolo_utils.clip_boxes(tlbr, hwc255.shape[0:2])
 
         chw01 = torch.FloatTensor(hwc255.transpose(2, 0, 1) / 255)
         gt_classes = torch.LongTensor(gt_classes)
-        boxes = torch.LongTensor(boxes.astype(np.int32))
-        label = (boxes, gt_classes,)
+
+        # The original YOLO-v2 works in xywh, but this implementation seems to
+        boxes = torch.FloatTensor(tlbr)
+
+        # Return index information in the label as well
+        orig_size = torch.LongTensor([im_w, im_h])
+        index = torch.LongTensor([index])
+        gt_weights = torch.FloatTensor(gt_weights)
+        label = (boxes, gt_classes, orig_size, index, gt_weights)
+
         return chw01, label
 
     # @ub.memoize_method
@@ -429,8 +457,8 @@ def ensure_ulimit():
 def setup_harness():
     """
     CommandLine:
-        python ~/code/baseline-viame-2018/yolo.py setup_harness
-        python ~/code/baseline-viame-2018/yolo.py setup_harness --profile
+        python ~/code/baseline-viame-2018/yolo_viame.py setup_harness
+        python ~/code/baseline-viame-2018/yolo_viame.py setup_harness --profile
 
     Example:
         >>> harn = setup_harness()
@@ -666,7 +694,7 @@ def setup_harness():
 
 def train():
     """
-    python ~/code/baseline-viame-2018/yolo.py train --nice phase0 --phase=0
+    python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase0_b16 --phase=0 --batch_size=16 --workers=2 --gpu=0
     """
     harn = setup_harness()
     with harn.xpu:
@@ -677,7 +705,7 @@ if __name__ == '__main__':
     r"""
     CommandLine:
         export PYTHONPATH=$PYTHONPATH:/home/joncrall/code/clab/examples
-        python ~/code/clab/examples/yolo.py
+        python ~/code/clab/examples/yolo_viame.py
     """
     import xdoctest
     xdoctest.doctest_module(__file__)
