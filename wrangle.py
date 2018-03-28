@@ -52,7 +52,7 @@ def setup_data():
         * coarse-grained + bbox-keypoints
 
     CommandLine:
-        python ~/code/baseline-viame-2018/wrangle.py setup_data
+        python ~/code/baseline-viame-2018/wrangle.py setup_data --data=$HOME/data --work=$HOME/work --phase=0
     """
     cfg = viame_wrangler.config.WrangleConfig()
 
@@ -124,20 +124,6 @@ def setup_data():
     return fine, coarse, fine_bbox, coarse_bbox
 
 
-def setup_yolo():
-    """
-    CommandLine:
-        python ~/code/baseline-viame-2018/wrangle.py setup_yolo
-    """
-    cfg = viame_wrangler.config.WrangleConfig()
-    fine, coarse = setup_data()
-    train_dset, test_dset = make_test_train(coarse)
-
-    print('Writing')
-    train_dset.dump(join(cfg.challenge_work_dir, 'phase0-merged-train.mscoco.json'))
-    test_dset.dump(join(cfg.challenge_work_dir, 'phase0-merged-test.mscoco.json'))
-
-
 def make_test_train(merged):
     # Split into train / test  set
     print('Splitting')
@@ -163,6 +149,21 @@ def make_test_train(merged):
     print('--- Testing Stats ---')
     print(ub.repr2(test_dset.basic_stats()))
     return train_dset, test_dset
+
+
+def setup_yolo():
+    """
+    CommandLine:
+        python ~/code/baseline-viame-2018/wrangle.py setup_yolo --data=$HOME/data --work=$HOME/work --phase=0
+    """
+    cfg = viame_wrangler.config.WrangleConfig()
+    fine, coarse = setup_data()
+    train_dset, test_dset = make_test_train(coarse)
+
+    print('Writing')
+    prefix = 'phase{}'.format(cfg.phase)
+    train_dset.dump(join(cfg.challenge_work_dir, prefix + '-train.mscoco.json'))
+    test_dset.dump(join(cfg.challenge_work_dir, prefix + '-test.mscoco.json'))
 
 
 if __name__ == '__main__':
