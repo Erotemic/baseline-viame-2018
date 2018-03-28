@@ -157,13 +157,15 @@ def setup_yolo():
         python ~/code/baseline-viame-2018/wrangle.py setup_yolo --data=$HOME/data --work=$HOME/work --phase=0
     """
     cfg = viame_wrangler.config.WrangleConfig()
-    fine, coarse = setup_data()
-    train_dset, test_dset = make_test_train(coarse)
+    fine, coarse, fine_bbox, coarse_bbox = setup_data()
+
+    suffix = 'coarse-bbox-only'
+    train_dset, test_dset = make_test_train(coarse_bbox)
 
     print('Writing')
     prefix = 'phase{}'.format(cfg.phase)
-    train_dset.dump(join(cfg.challenge_work_dir, prefix + '-train.mscoco.json'))
-    test_dset.dump(join(cfg.challenge_work_dir, prefix + '-test.mscoco.json'))
+    train_dset.dump(join(cfg.challenge_work_dir, prefix + suffix + '-train.mscoco.json'))
+    test_dset.dump(join(cfg.challenge_work_dir, prefix + suffix + '-val.mscoco.json'))
 
 
 if __name__ == '__main__':
