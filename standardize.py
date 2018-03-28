@@ -1,3 +1,6 @@
+"""
+Script for generating viame_wrangler/mappings.py
+"""
 from __future__ import absolute_import, division, print_function, unicode_literals
 from os.path import join, dirname
 import glob
@@ -9,31 +12,13 @@ import viame_wrangler
 DRAW = True
 
 
-class WrangleConfig(object):
-    def __init__(cfg):
-        cfg.work_dir = ub.truepath(ub.argval('--work', default='~/work'))
-        cfg.data_dir = ub.truepath(ub.argval('--data', default='~/data'))
-        cfg.challenge_data_dir = join(cfg.data_dir, 'viame-challenge-2018')
-        cfg.challenge_work_dir = join(cfg.work_dir, 'viame-challenge-2018')
-        ub.ensuredir(cfg.challenge_work_dir)
-
-        cfg.phase = int(ub.argval('--phase', default='0'))
-        if cfg.phase == 0:
-            cfg.img_root = join(cfg.challenge_data_dir, 'phase0-imagery')
-            cfg.annot_dir = join(cfg.challenge_data_dir, 'full-datasets')
-        elif cfg.phase == 1:
-            pass
-        else:
-            raise KeyError(cfg.phase)
-
-
 def download_phase0_annots():
     """
     CommandLine:
         pip install girder-client
         python ~/code/baseline-viame-2018/standardize.py download_phase0_annots
     """
-    cfg = WrangleConfig()
+    cfg = viame_wrangler.config.WrangleConfig()
     dpath = cfg.challenge_data_dir
     fname = 'phase0-annotations.tar.gz'
     dest = os.path.join(dpath, fname)
@@ -51,7 +36,7 @@ def download_phase0_annots():
 
 # @ub.memoize
 def read_raw_categories():
-    cfg = WrangleConfig()
+    cfg = viame_wrangler.config.WrangleConfig()
     img_root = cfg.img_root
     annot_dir = cfg.annot_dir
     fpaths = list(glob.glob(join(annot_dir, '*.json')))
