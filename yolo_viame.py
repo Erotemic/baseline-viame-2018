@@ -53,6 +53,14 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
 
         >>> self = TorchCocoDataset()
         >>> index = 139
+
+    Ignore:
+        for index in ub.ProgIter(range(len(self))):
+            self._load_annotation(index)
+
+        for index in ub.ProgIter(range(len(self))):
+            self._load_image(index)
+
     """
     def __init__(self, coco_fpath=None, img_root=None):
 
@@ -180,7 +188,14 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         img = self.dset.dataset['images'][index]
         gpath = join(self.dset.img_root, img['file_name'])
         imbgr = cv2.imread(gpath)
+
+        if 'habcam' in gpath:
+            # HACK: habcam images are stereo and we only have annots for the
+            # left side.
+            imbgr = imbgr[:, 0:imbgr.shape[1] // 2, :]
+
         imrgb_255 = cv2.cvtColor(imbgr, cv2.COLOR_BGR2RGB)
+
         return imrgb_255
 
     def _load_annotation(self, index):
