@@ -12,28 +12,6 @@ import viame_wrangler
 DRAW = True
 
 
-def download_phase0_annots():
-    """
-    CommandLine:
-        pip install girder-client
-        python ~/code/baseline-viame-2018/standardize.py download_phase0_annots
-    """
-    cfg = viame_wrangler.config.WrangleConfig()
-    dpath = cfg.challenge_data_dir
-    fname = 'phase0-annotations.tar.gz'
-    dest = os.path.join(dpath, fname)
-    if not os.path.exists(dest):
-        from girder_client.cli import main  # NOQA
-        command = 'girder-cli --api-url https://challenge.kitware.com/api/v1 download 5a9d839456357d0cb633d0e3 {}'.format(dpath)
-        info = ub.cmd(command, verbout=1, verbose=1, shell=True)
-        assert info['ret'] == 0
-    unpacked = join(dpath, 'phase0-annotations')
-    if not os.path.exists(unpacked):
-        info = ub.cmd('tar -xvzf "{}" -C "{}"'.format(dest, dpath), verbose=2, verbout=1)
-        assert info['ret'] == 0
-    return dest
-
-
 # @ub.memoize
 def read_raw_categories():
     cfg = viame_wrangler.config.WrangleConfig()

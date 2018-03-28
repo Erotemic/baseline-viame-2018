@@ -47,9 +47,9 @@ def setup_data():
     """
     Create final MSCOCO training files for the 4 challenge types:
         * fine-grained + bbox-only
-        * fine-grained + bbox+keypoints
+        * fine-grained + bbox-keypoints
         * coarse-grained + bbox-only
-        * coarse-grained + bbox+keypoints
+        * coarse-grained + bbox-keypoints
 
     CommandLine:
         python ~/code/baseline-viame-2018/wrangle.py setup_data
@@ -88,13 +88,18 @@ def setup_data():
     ensure_heirarchy(fine, FineGrainedChallenge.heirarchy)
     if 1:
         # print(ub.repr2(fine.category_annotation_type_frequency(), nl=1, sk=1))
-        print('Dumping fine grained bbox+keypoints')
+        print('Dumping fine-bbox-keypoint')
         print(ub.repr2(fine.basic_stats()))
     fine.dump(join(cfg.challenge_work_dir, prefix + '-fine-bbox-keypoint.mscoco.json'))
+
     # remove keypoint annotations
     # Should we remove the images that have keypoints in them?
     fine_bbox = fine.copy()
     fine_bbox._remove_keypoint_annotations()
+    if 1:
+        # print(ub.repr2(fine.category_annotation_type_frequency(), nl=1, sk=1))
+        print('Dumping fine-bbox-only')
+        print(ub.repr2(fine_bbox.basic_stats()))
     fine_bbox.dump(join(cfg.challenge_work_dir, prefix + '-fine-bbox-only.mscoco.json'))
 
     ### COARSE DSET  ###
@@ -106,13 +111,16 @@ def setup_data():
     coarse.dump(join(cfg.challenge_work_dir, prefix + '-coarse-bbox-keypoint.mscoco.json'))
     if 1:
         # print(ub.repr2(coarse.category_annotation_type_frequency(), nl=1, sk=1))
-        print('Dumping coarse grained bbox+keypoints')
+        print('Dumping coarse-bbox-keypoint')
         print(ub.repr2(coarse.basic_stats()))
+
     # remove keypoint annotations
     coarse_bbox = coarse.copy()
     coarse_bbox._remove_keypoint_annotations()
-
-    print('Dumping coarse grained bbox only')
+    if 1:
+        # print(ub.repr2(fine.category_annotation_type_frequency(), nl=1, sk=1))
+        print('Dumping coarse-bbox-only')
+        print(ub.repr2(coarse_bbox.basic_stats()))
     coarse_bbox.dump(join(cfg.challenge_work_dir, prefix + '-coarse-bbox-only.mscoco.json'))
     return fine, coarse, fine_bbox, coarse_bbox
 
