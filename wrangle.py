@@ -40,6 +40,7 @@ from os.path import join
 import glob
 import ubelt as ub
 from coco_wrangler import CocoDataset, StratifiedGroupKFold
+import viame_wrangler
 import viame_wrangler.mappings
 
 

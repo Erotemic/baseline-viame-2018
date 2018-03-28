@@ -42,14 +42,15 @@ class DataConfig(object):
         cfg.datadir = other.data_dir
         cfg.workdir = other.work_dir
         cfg.img_root = other.img_root
-        cfg.train_fpath = join(other.challenge_data_dir, 'phase0-coarse-bbox-only-train.mscoco.json')
-        cfg.vali_fapth = join(other.challenge_data_dir, 'phase0-coarse-bbox-only-val.mscoco.json')
+        cfg.train_fpath = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-train.mscoco.json')
+        cfg.vali_fapth = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-val.mscoco.json')
         return cfg
 
 
 class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
     """
     Example:
+
         >>> self = TorchCocoDataset()
         >>> index = 139
     """
