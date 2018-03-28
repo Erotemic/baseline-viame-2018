@@ -16,6 +16,7 @@ hacks:
     tar xvzf ~/Downloads/noaa-full-datasets.tar.gz -C ~/data/viame-challenge-2018
     ls ~/data/viame-challenge-2018
 
+
 Challenge Website:
     http://www.viametoolkit.org/cvpr-2018-workshop-data-challenge/
 
@@ -162,6 +163,20 @@ def setup_data():
     coarse_bbox = coarse.copy()
     coarse_bbox._remove_keypoint_annotations()
     coarse_bbox.dump(join(cfg.challenge_work_dir, 'phase0-merged-coarse-bbox.mscoco.json'))
+    return fine, coarse
+
+
+def setup_yolo():
+    """
+        python ~/code/baseline-viame-2018/wrangle.py setup_yolo
+    """
+    cfg = WrangleConfig()
+    fine, coarse = setup_data()
+    train_dset, test_dset = make_test_train(coarse)
+
+    print('Writing')
+    train_dset.dump(join(cfg.challenge_work_dir, 'phase0-merged-train.mscoco.json'))
+    test_dset.dump(join(cfg.challenge_work_dir, 'phase0-merged-test.mscoco.json'))
 
 
 def make_test_train(merged):
@@ -188,6 +203,7 @@ def make_test_train(merged):
     print(ub.repr2(train_dset.basic_stats()))
     print('--- Testing Stats ---')
     print(ub.repr2(test_dset.basic_stats()))
+    return train_dset, test_dset
 
 
 def setup_detectron(train_dset, test_dset):

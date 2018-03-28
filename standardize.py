@@ -1,6 +1,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 from os.path import join, dirname
 import glob
+import os
 import ubelt as ub
 import coco_wrangler
 import viame_wrangler
@@ -16,12 +17,43 @@ class WrangleConfig(object):
         cfg.challenge_work_dir = join(cfg.work_dir, 'viame-challenge-2018')
         ub.ensuredir(cfg.challenge_work_dir)
 
+        cfg.phase = int(ub.argval('--phase', default='0'))
+        if cfg.phase == 0:
+            cfg.img_root = join(cfg.challenge_data_dir, 'phase0-imagery')
+            cfg.annot_dir = join(cfg.challenge_data_dir, 'full-datasets')
+        elif cfg.phase == 1:
+            pass
+        else:
+            raise KeyError(cfg.phase)
+
+
+def download_phase0_annots():
+    """
+    CommandLine:
+        pip install girder-client
+        python ~/code/baseline-viame-2018/standardize.py download_phase0_annots
+    """
+    cfg = WrangleConfig()
+    dpath = cfg.challenge_data_dir
+    fname = 'phase0-annotations.tar.gz'
+    dest = os.path.join(dpath, fname)
+    if not os.path.exists(dest):
+        from girder_client.cli import main  # NOQA
+        command = 'girder-cli --api-url https://challenge.kitware.com/api/v1 download 5a9d839456357d0cb633d0e3 {}'.format(dpath)
+        info = ub.cmd(command, verbout=1, verbose=1, shell=True)
+        assert info['ret'] == 0
+    unpacked = join(dpath, 'phase0-annotations')
+    if not os.path.exists(unpacked):
+        info = ub.cmd('tar -xvzf "{}" -C "{}"'.format(dest, dpath), verbose=2, verbout=1)
+        assert info['ret'] == 0
+    return dest
+
 
 # @ub.memoize
 def read_raw_categories():
     cfg = WrangleConfig()
-    img_root = join(cfg.challenge_data_dir, 'phase0-imagery')
-    annot_dir = join(cfg.challenge_data_dir, 'full-datasets')
+    img_root = cfg.img_root
+    annot_dir = cfg.annot_dir
     fpaths = list(glob.glob(join(annot_dir, '*.json')))
 
     print('Reading')
