@@ -191,7 +191,7 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
 
         if 'habcam' in gpath:
             # HACK: habcam images are stereo and we only have annots for the
-            # left side.
+            # left side. Crop off the left side
             imbgr = imbgr[:, 0:imbgr.shape[1] // 2, :]
 
         imrgb_255 = cv2.cvtColor(imbgr, cv2.COLOR_BGR2RGB)
