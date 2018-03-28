@@ -107,12 +107,11 @@ def setup_data():
     CoarseChallenge = viame_wrangler.mappings.CoarseChallenge
     coarse.rename_categories(CoarseChallenge.raw_to_cat)
     ensure_heirarchy(coarse, CoarseChallenge.heirarchy)
-    print(ub.repr2(coarse.basic_stats()))
-    coarse.dump(join(cfg.challenge_work_dir, prefix + '-coarse-bbox-keypoint.mscoco.json'))
     if 1:
         # print(ub.repr2(coarse.category_annotation_type_frequency(), nl=1, sk=1))
         print('Dumping coarse-bbox-keypoint')
         print(ub.repr2(coarse.basic_stats()))
+    coarse.dump(join(cfg.challenge_work_dir, prefix + '-coarse-bbox-keypoint.mscoco.json'))
 
     # remove keypoint annotations
     coarse_bbox = coarse.copy()
