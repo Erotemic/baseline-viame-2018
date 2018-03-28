@@ -164,8 +164,13 @@ def setup_yolo():
 
     print('Writing')
     prefix = 'phase{}'.format(cfg.phase)
-    train_dset.dump(join(cfg.challenge_work_dir, prefix + suffix + '-train.mscoco.json'))
-    test_dset.dump(join(cfg.challenge_work_dir, prefix + suffix + '-val.mscoco.json'))
+    train_fpath = join(cfg.challenge_work_dir, prefix + suffix + '-train.mscoco.json')
+    test_fpath = join(cfg.challenge_work_dir, prefix + suffix + '-val.mscoco.json')
+    print('train_fpath = {!r}'.format(train_fpath))
+    print('test_fpath = {!r}'.format(test_fpath))
+
+    train_dset.dump(train_fpath)
+    test_dset.dump(test_fpath)
 
 
 if __name__ == '__main__':
