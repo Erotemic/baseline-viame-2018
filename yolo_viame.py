@@ -35,12 +35,15 @@ class DataConfig(object):
 
     @classmethod
     def phase0(DataConfig):
+        import viame_wrangler
+        cfg = viame_wrangler.config.WrangleConfig()
+
         cfg = DataConfig()
-        cfg.datadir = ub.truepath('~/data')
-        cfg.workdir = ub.truepath('~/work/viame-challenge-2018')
-        cfg.img_root = ub.truepath('~/data/viame-challenge-2018/phase0-imagery')
-        cfg.train_fpath = ub.truepath('~/work/viame-challenge-2018/phase0-merged-train.mscoco.json')
-        cfg.test_fpath = ub.truepath('~/work/viame-challenge-2018/phase0-merged-test.mscoco.json')
+        cfg.datadir = cfg.data_dir
+        cfg.workdir = cfg.work_dir
+        cfg.img_root = cfg.img_root
+        cfg.train_fpath = join(cfg.challenge_data_dir, 'phase0-coarse-bbox-only-train.mscoco.json')
+        cfg.vali_fapth = join(cfg.challenge_data_dir, 'phase0-coarse-bbox-only-val.mscoco.json')
         return cfg
 
 

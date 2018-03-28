@@ -18,7 +18,8 @@ class WrangleConfig(object):
             cfg.img_root = join(cfg.challenge_data_dir, 'phase0-imagery')
             cfg.annot_dir = join(cfg.challenge_data_dir, 'phase0-annotations')
         elif cfg.phase == '1':
-            pass
+            cfg.img_root = join(cfg.challenge_data_dir, 'phase1-imagery')
+            cfg.annot_dir = join(cfg.challenge_data_dir, 'phase1-annotations')
         elif cfg.phase == 'full':
             cfg.img_root = join(cfg.challenge_data_dir, 'phase0-imagery')
             cfg.annot_dir = join(cfg.challenge_data_dir, 'full-datasets')
