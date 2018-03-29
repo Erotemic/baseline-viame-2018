@@ -90,6 +90,8 @@ def setup_data():
     print('Merging')
     merged = CocoDataset.union(*dsets)
     merged.img_root = img_root
+    # Set has_annots=True on all images with at least one annotation
+    merged._mark_annotated_images()
 
     def ensure_heirarchy(dset, heirarchy):
         for cat in heirarchy:
@@ -101,46 +103,37 @@ def setup_data():
 
     prefix = 'phase{}'.format(cfg.phase)
 
+    def verbose_dump(dset, fpath):
+        print('Dumping {}'.format(fpath))
+        if False:
+            print(ub.repr2(dset.category_annotation_type_frequency(), nl=1, sk=1))
+        print(ub.dict_hist([img['has_annots'] for img in dset.imgs.values()]))
+        print(ub.repr2(dset.basic_stats()))
+        dset.dump(fpath)
+
     ### FINE-GRAIND DSET  ###
     fine = merged.copy()
     FineGrainedChallenge = viame_wrangler.mappings.FineGrainedChallenge
     fine.rename_categories(FineGrainedChallenge.raw_to_cat)
-    ensure_heirarchy(fine, FineGrainedChallenge.heirarchy)
-    if 1:
-        # print(ub.repr2(fine.category_annotation_type_frequency(), nl=1, sk=1))
-        print('Dumping fine-bbox-keypoint')
-        print(ub.repr2(fine.basic_stats()))
-    fine.dump(join(cfg.challenge_work_dir, prefix + '-fine-bbox-keypoint.mscoco.json'))
+    verbose_dump(fine, join(cfg.challenge_work_dir, prefix + '-fine-bbox-keypoint.mscoco.json'))
 
     # remove keypoint annotations
     # Should we remove the images that have keypoints in them?
     fine_bbox = fine.copy()
     fine_bbox._remove_keypoint_annotations()
-    if 1:
-        # print(ub.repr2(fine.category_annotation_type_frequency(), nl=1, sk=1))
-        print('Dumping fine-bbox-only')
-        print(ub.repr2(fine_bbox.basic_stats()))
-    fine_bbox.dump(join(cfg.challenge_work_dir, prefix + '-fine-bbox-only.mscoco.json'))
+    verbose_dump(fine_bbox, join(cfg.challenge_work_dir, prefix + '-fine-bbox-only.mscoco.json'))
 
     ### COARSE DSET  ###
     coarse = merged.copy()
     CoarseChallenge = viame_wrangler.mappings.CoarseChallenge
     coarse.rename_categories(CoarseChallenge.raw_to_cat)
     ensure_heirarchy(coarse, CoarseChallenge.heirarchy)
-    if 1:
-        # print(ub.repr2(coarse.category_annotation_type_frequency(), nl=1, sk=1))
-        print('Dumping coarse-bbox-keypoint')
-        print(ub.repr2(coarse.basic_stats()))
-    coarse.dump(join(cfg.challenge_work_dir, prefix + '-coarse-bbox-keypoint.mscoco.json'))
+    verbose_dump(coarse, join(cfg.challenge_work_dir, prefix + '-coarse-bbox-keypoint.mscoco.json'))
 
     # remove keypoint annotations
     coarse_bbox = coarse.copy()
     coarse_bbox._remove_keypoint_annotations()
-    if 1:
-        # print(ub.repr2(fine.category_annotation_type_frequency(), nl=1, sk=1))
-        print('Dumping coarse-bbox-only')
-        print(ub.repr2(coarse_bbox.basic_stats()))
-    coarse_bbox.dump(join(cfg.challenge_work_dir, prefix + '-coarse-bbox-only.mscoco.json'))
+    verbose_dump(coarse_bbox, join(cfg.challenge_work_dir, prefix + '-coarse-bbox-only.mscoco.json'))
     return fine, coarse, fine_bbox, coarse_bbox
 
 

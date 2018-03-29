@@ -104,6 +104,16 @@ class CocoDataset(ub.NiceRepr):
             self._build_index()
 
     def copy(self):
+        """
+        Example:
+            >>> from coco_wrangler.coco_api import *
+            >>> dataset = demo_coco_data()
+            >>> self = CocoDataset(dataset, tag='demo')
+            >>> new = self.copy()
+            >>> assert new.imgs[1] is new.dataset['images'][0]
+            >>> assert new.imgs[1] == self.dataset['images'][0]
+            >>> assert new.imgs[1] is not self.dataset['images'][0]
+        """
         import copy
         new = copy.copy(self)
         new.dataset = copy.deepcopy(self.dataset)
@@ -118,12 +128,29 @@ class CocoDataset(ub.NiceRepr):
             parts.append(info)
         return ', '.join(parts)
 
-    def dump(self, fpath, indent=4):
+    def dump(self, file, indent=4):
         """
         Writes the dataset out to the json format
+
+        Args:
+            file (str of stream)
+
+        Example:
+            >>> from coco_wrangler.coco_api import *
+            >>> from six.moves import cStringIO as StringIO
+            >>> dataset = demo_coco_data()
+            >>> self = CocoDataset(dataset, tag='demo')
+            >>> fp = StringIO()
+            >>> self.dump(fp)
+            >>> fp.seek(0)
+            >>> text = fp.read()
+            >>> print(text)
         """
-        with open(fpath, 'w') as fp:
-            json.dump(self.dataset, fp, indent=indent)
+        if isinstance(file, six.string_types):
+            with open(file, 'w') as fp:
+                self.dump(fp, indent=indent)
+        else:
+            json.dump(self.dataset, file, indent=indent)
 
     def _build_index(self):
         """
@@ -651,6 +678,23 @@ class CocoDataset(ub.NiceRepr):
                 if hasattr(ann, has):
                     print('ann = {!r}'.format(ann))
                     yield ann
+
+    def _mark_annotated_images(self):
+        """
+        Mark any image that explicitly has annotations.
+        """
+        for gid, img in self.imgs.items():
+            aids = self.gid_to_aids.get(gid, [])
+            # If there is at least one annotation, always mark as has_annots
+            if len(aids) > 0:
+                assert getattr(img, 'has_annots', None) is not False, (
+                    'image with annots was explictly labeled as False!')
+                img['has_annots'] = True
+            else:
+                # Otherwise set has_annots to null if it has not been
+                # explicitly labeled
+                if not hasattr(img, 'has_annots'):
+                    img['has_annots'] = None
 
     def _remove_keypoint_annotations(self):
         to_remove = []
