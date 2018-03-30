@@ -251,6 +251,20 @@ def setup_yolo(cfg=None):
     # prefix = 'phase{}'.format(cfg.phase)
     train_dset, test_dset = make_test_train(merged)
 
+    def check_images_exist(dset):
+        bad_paths = []
+        for index in ub.ProgIter(range(len(dset.dataset['images']))):
+            img = dset.dataset['images'][index]
+            gpath = join(dset.img_root, img['file_name'])
+            if not os.path.exists(gpath):
+                bad_paths.append((index, gpath))
+        if bad_paths:
+            print(ub.repr2(bad_paths, nl=1))
+            raise AssertionError('missing images')
+
+    check_images_exist(test_dset)
+    check_images_exist(train_dset)
+
     if 1:
         print(ub.repr2(train_dset.category_annotation_type_frequency(), nl=1, sk=1))
         print(ub.repr2(test_dset.category_annotation_type_frequency(), nl=1, sk=1))
