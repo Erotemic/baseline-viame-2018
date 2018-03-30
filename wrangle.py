@@ -236,10 +236,11 @@ def setup_yolo(cfg=None):
     for fpath in sorted(fpaths):
         print('reading fpath = {!r}'.format(fpath))
         import os
-        hack = os.path.basename(fpath).split('-')[0]
-        if hack == 'afsc_seq1':
-            hack == ''
-        dset = CocoDataset(fpath, img_root=hack)
+        hack = os.path.basename(fpath).split('-')[0].split('.')[0]
+        # if hack == 'afsc_seq1':
+        #     hack == ''
+        dset = CocoDataset(fpath, tag='', img_root=hack)
+        # dset = CocoDataset(fpath)
         print(ub.repr2(dset.basic_stats()))
         dsets.append(dset)
 
