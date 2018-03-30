@@ -54,6 +54,18 @@ class DataConfig(object):
         cfg.vali_fapth = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-val.mscoco.json')
         return cfg
 
+    @classmethod
+    def phase1(DataConfig):
+        import viame_wrangler
+        other = viame_wrangler.config.WrangleConfig()
+
+        cfg = DataConfig()
+        cfg.workdir = other.workdir
+        cfg.img_root = other.img_root
+        cfg.train_fpath = join(other.workdir, 'train.mscoco.json')
+        cfg.vali_fapth = join(other.workdir, 'vali.mscoco.json')
+        return cfg
+
 
 class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
     """
@@ -486,7 +498,7 @@ def setup_harness():
         >>> harn.run()
     """
 
-    cfg = DataConfig.phase0()
+    cfg = DataConfig.phase1()
     workdir = cfg.workdir
     datasets = {
         'train': YoloCocoDataset(cfg.train_fpath, cfg.img_root),

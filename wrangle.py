@@ -164,7 +164,7 @@ def make_test_train(merged):
     return train_dset, test_dset
 
 
-def setup_yolo():
+def setup_yolo(cfg=None):
     """
     CommandLine:
         python ~/code/baseline-viame-2018/wrangle.py setup_yolo \
@@ -182,7 +182,8 @@ def setup_yolo():
         cfg.img_root = '/data/projects/noaa/phase1-imagery'
         cfg.work = ub.truepath('$HOME/work/viame-challenge-2018')
     """
-    cfg = viame_wrangler.config.WrangleConfig()
+    if cfg is not None:
+        cfg = viame_wrangler.config.WrangleConfig()
 
     fpaths = list(glob.glob(cfg.annots))
     print('fpaths = {!r}'.format(fpaths))
@@ -201,6 +202,10 @@ def setup_yolo():
     # suffix = 'coarse-bbox-only'
     # prefix = 'phase{}'.format(cfg.phase)
     train_dset, test_dset = make_test_train(merged)
+
+    if 1:
+        print(ub.repr2(train_dset.category_annotation_type_frequency(), nl=1, sk=1))
+        print(ub.repr2(test_dset.category_annotation_type_frequency(), nl=1, sk=1))
 
     print('Writing')
     train_fpath = join(cfg.workdir, 'train.mscoco.json')
