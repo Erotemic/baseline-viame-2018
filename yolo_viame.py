@@ -110,6 +110,18 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         self.num_classes = len(self.label_names)
         self.input_id = os.path.basename(self.coco_fpath)
 
+        if False:
+            # setup heirarchy
+            import networkx as nx
+            g = nx.DiGraph()
+            for cat in self.dset.cats.values():
+                g.add_node(cat['name'])
+                if 'supercategory' in cat:
+                    g.add_edge(cat['supercategory'], cat['name'])
+            for key, val in g.adj.items():
+                print('node = {!r}'.format(key))
+                print('    * neighbs = {!r}'.format(list(val)))
+
     def check_images_exist(self):
         """
         Example:
@@ -497,13 +509,22 @@ def setup_harness():
         >>> harn.dry = True
         >>> harn.run()
     """
+    if int(ub.argval('--phase', default=1)) == 1:
+        cfg = DataConfig.phase1()
+        # hack
+        cfg.img_root = '/data/projects/noaa/phase1-imagery'
+    else:
+        assert False
+        cfg = DataConfig.phase0()
 
-    cfg = DataConfig.phase1()
     workdir = cfg.workdir
     datasets = {
         'train': YoloCocoDataset(cfg.train_fpath, cfg.img_root),
         'vali': YoloCocoDataset(cfg.vali_fapth, cfg.img_root),
     }
+
+    datasets['train'].check_images_exist()
+    datasets['vali'].check_images_exist()
 
     n_cpus = psutil.cpu_count(logical=True)
     workers = int(n_cpus / 2)
@@ -716,8 +737,8 @@ def setup_harness():
         mean_ap, ap_list = voc.EvaluateVOC.compute_map(y, num_classes)
 
         harn.log_value(tag + ' epoch mAP', mean_ap, harn.epoch)
-        # max_ap = np.nanmax(ap_list)
-        # harn.log_value(tag + ' epoch max-AP', max_ap, harn.epoch)
+        max_ap = np.nanmax(ap_list)
+        harn.log_value(tag + ' epoch max-AP', max_ap, harn.epoch)
         harn.batch_confusions.clear()
 
     return harn
@@ -726,6 +747,7 @@ def setup_harness():
 def train():
     """
     python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase0_b16 --phase=0 --batch_size=16 --workers=2 --gpu=0
+    python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase1_b16 --phase=1 --batch_size=16 --workers=2 --gpu=0
     """
     harn = setup_harness()
     with harn.xpu:

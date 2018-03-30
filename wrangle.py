@@ -192,7 +192,7 @@ def setup_yolo(cfg=None):
     dsets = []
     for fpath in sorted(fpaths):
         print('reading fpath = {!r}'.format(fpath))
-        dset = CocoDataset(fpath)
+        dset = CocoDataset(fpath, img_root='')
         dsets.append(dset)
 
     print('Merging')
