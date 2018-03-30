@@ -55,7 +55,7 @@ class DataConfig(object):
         # return cfg
         cfg = DataConfig()
         cfg.workdir = ub.truepath(ub.argval('--work', default='~/work/viame-challenge-2018'))
-        cfg.img_root = ub.truepath(ub.argval('--img_root', default='~/data/viame-challenge-2018/phase0-imagery', argv=argv))
+        cfg.img_root = ub.truepath(ub.argval('--img_root', default='~/data/viame-challenge-2018/phase0-imagery'))
         cfg.train_fpath = join(cfg.workdir, 'train.mscoco.json')
         cfg.vali_fapth = join(cfg.workdir, 'vali.mscoco.json')
         return cfg
@@ -107,6 +107,17 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         from coco_wrangler import CocoDataset
         self.coco_fpath = coco_fpath
         self.dset = CocoDataset(coco_fpath, img_root=img_root)
+
+        # Hack: remove all images marked as has_annot, but with no annotations.
+        to_remove = []
+        for gid, img in self.dset.imgs.items():
+            aids = self.dset.gid_to_aids[gid]
+            if len(aids) == 0:
+                print(img['has_annots'])
+            if img['has_annots'] is True:
+                aids = self.dset.gid_to_aids[gid]
+                    to_remove.append(gid)
+                    print('gid = {!r}'.format(gid))
 
         self.label_names = sorted(self.dset.name_to_cat,
                                   key=lambda n: self.dset.name_to_cat[n]['id'])

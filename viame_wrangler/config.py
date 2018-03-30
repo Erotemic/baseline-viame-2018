@@ -11,7 +11,7 @@ class WrangleConfig(object):
 
         cfg.workdir = ub.truepath(ub.argval('--work', default='~/work/viame-challenge-2018', argv=argv))
         cfg.img_root = ub.truepath(ub.argval('--img_root', default='~/data/viame-challenge-2018/phase1-imagery', argv=argv))
-        cfg.annots = ub.truepath(ub.argval('--annots', default='~/data/viame-challenge-2018/phase1-annotations', argv=argv))
+        cfg.annots = ub.truepath(ub.argval('--annots', default='~/data/viame-challenge-2018/phase1-annotations/*.json', argv=argv))
 
         # cfg.challenge_data_dir = join(cfg.data_dir, 'viame-challenge-2018')
         ub.ensuredir(cfg.workdir)
