@@ -44,14 +44,20 @@ class DataConfig(object):
 
     @classmethod
     def phase0(DataConfig):
-        import viame_wrangler
-        other = viame_wrangler.config.WrangleConfig()
+        # import viame_wrangler
+        # other = viame_wrangler.config.WrangleConfig()
 
+        # cfg = DataConfig()
+        # cfg.workdir = other.workdir
+        # cfg.img_root = other.img_root
+        # cfg.train_fpath = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-train.mscoco.json')
+        # cfg.vali_fapth = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-val.mscoco.json')
+        # return cfg
         cfg = DataConfig()
-        cfg.workdir = other.workdir
-        cfg.img_root = other.img_root
-        cfg.train_fpath = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-train.mscoco.json')
-        cfg.vali_fapth = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-val.mscoco.json')
+        cfg.workdir = ub.truepath(ub.argval('--work', default='~/work/viame-challenge-2018'))
+        cfg.img_root = ub.truepath(ub.argval('--img_root', default='~/data/viame-challenge-2018/phase0-imagery', argv=argv))
+        cfg.train_fpath = join(cfg.workdir, 'train.mscoco.json')
+        cfg.vali_fapth = join(cfg.workdir, 'vali.mscoco.json')
         return cfg
 
     @classmethod
@@ -63,6 +69,7 @@ class DataConfig(object):
 
         cfg = DataConfig()
         cfg.workdir = ub.truepath(ub.argval('--work', default='~/work/viame-challenge-2018'))
+        cfg.img_root = ub.truepath(ub.argval('--img_root', default='~/data/viame-challenge-2018/phase1-imagery'))
         cfg.train_fpath = join(cfg.workdir, 'train.mscoco.json')
         cfg.vali_fapth = join(cfg.workdir, 'vali.mscoco.json')
         return cfg
