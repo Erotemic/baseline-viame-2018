@@ -179,7 +179,7 @@ def make_test_train(merged):
             # There are fish in this image, but the annots were removed
             gids_true.append(gid)
         else:
-            assert False
+            assert False, repr(merged.imgs[gid]['has_annots'])
 
     rng.shuffle(gids_maybe)
     rng.shuffle(gids_false)
