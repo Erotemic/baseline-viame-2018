@@ -5,6 +5,13 @@ Ignore:
     rsync -avzP ~/data/./viame-challenge-2018/phase0-imagery hermes:data/viame-challenge-2018/
     rsync -avzP ~/data/viame-challenge-2018/phase0-imagery/./mbari_seq0 hermes:data/viame-challenge-2018/phase0-imagery
     rsync -avzP ~/data/viame-challenge-2018/phase0-imagery/./mouss_seq1 hermes:data/viame-challenge-2018/phase0-imagery
+
+    rsync -avzP ~/data/viame-challenge-2018/phase0-imagery/./mouss_seq1 hermes:data/viame-challenge-2018/phase0-imagery
+
+    tar -xvzf /data/jowens/noaa
+    tar -xvzf /data/jowens/noaa/phase1-imagery.tar.gz -C /data/projects/noaa
+    tar -xvzf /data/jowens/noaa/phase1-annotations.tar.gz -C /data/projects/noaa
+
 """
 import os
 from os.path import join
@@ -41,7 +48,7 @@ class DataConfig(object):
         other = viame_wrangler.config.WrangleConfig()
 
         cfg = DataConfig()
-        cfg.workdir = other.challenge_work_dir
+        cfg.workdir = other.workdir
         cfg.img_root = other.img_root
         cfg.train_fpath = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-train.mscoco.json')
         cfg.vali_fapth = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-val.mscoco.json')

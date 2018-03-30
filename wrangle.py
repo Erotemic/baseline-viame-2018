@@ -167,18 +167,38 @@ def make_test_train(merged):
 def setup_yolo():
     """
     CommandLine:
-        python ~/code/baseline-viame-2018/wrangle.py setup_yolo --data=$HOME/data --work=$HOME/work --phase=0
+        python ~/code/baseline-viame-2018/wrangle.py setup_yolo \
+            --annots=$HOME/data/viame-challenge-2018/phase1-annotations \
+            --work=$HOME/work/viame-challenge-2018
+
+        python ~/code/baseline-viame-2018/wrangle.py setup_yolo \
+            --annotdir=/data/projects/noaa/phase1-annotations/*/*coarse-bbox-only*.json \
+            --img_root=/data/projects/noaa/phase1-imagery \
+            --work=$HOME/work/viame-challenge-2018
     """
     cfg = viame_wrangler.config.WrangleConfig()
-    fine, coarse, fine_bbox, coarse_bbox = setup_data()
+    # fine, coarse, fine_bbox, coarse_bbox = setup_data()
+    fpaths = list(glob.glob(cfg.annots))
+    print('fpaths = {!r}'.format(fpaths))
 
-    suffix = 'coarse-bbox-only'
+    print('Reading raw mscoco files')
+    dsets = []
+    for fpath in fpaths:
+        print('reading fpath = {!r}'.format(fpath))
+        dset = CocoDataset(fpath)
+        dsets.append(dset)
+
+    # suffix = 'coarse-bbox-only'
+    # prefix = 'phase{}'.format(cfg.phase)
     train_dset, test_dset = make_test_train(coarse_bbox)
 
+    print('Merging')
+    merged = CocoDataset.union(*dsets)
+    merged.img_root = cfg.img_root
+
     print('Writing')
-    prefix = 'phase{}'.format(cfg.phase)
-    train_fpath = join(cfg.challenge_work_dir, prefix + '-' + suffix + '-train.mscoco.json')
-    test_fpath = join(cfg.challenge_work_dir, prefix + '-' + suffix + '-val.mscoco.json')
+    train_fpath = join(cfg.workdir, 'train.mscoco.json')
+    test_fpath = join(cfg.workdir, 'vali.mscoco.json')
     print('train_fpath = {!r}'.format(train_fpath))
     print('test_fpath = {!r}'.format(test_fpath))
 
