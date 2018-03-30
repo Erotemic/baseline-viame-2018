@@ -237,6 +237,8 @@ def setup_yolo(cfg=None):
         print('reading fpath = {!r}'.format(fpath))
         import os
         hack = os.path.basename(fpath).split('-')[0]
+        if hack == 'afsc_seq1':
+            hack == ''
         dset = CocoDataset(fpath, img_root=hack)
         print(ub.repr2(dset.basic_stats()))
         dsets.append(dset)
