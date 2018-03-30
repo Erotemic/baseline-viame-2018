@@ -110,14 +110,21 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
 
         # Hack: remove all images marked as has_annot, but with no annotations.
         to_remove = []
-        for gid, img in self.dset.imgs.items():
-            aids = self.dset.gid_to_aids[gid]
-            if len(aids) == 0:
-                print(img['has_annots'])
-            if img['has_annots'] is True:
-                aids = self.dset.gid_to_aids[gid]
-                    to_remove.append(gid)
-                    print('gid = {!r}'.format(gid))
+
+        # if False:
+        #     sets = []
+        #     for gid, img in self.dset.imgs.items():
+        #         sets.append(os.path.dirname(img['file_name']))
+        #     ub.dict_hist(sets)
+
+        #     for gid, img in self.dset.imgs.items():
+        #         aids = self.dset.gid_to_aids.get(gid, [])
+        #         if len(aids) == 0:
+        #             print(img['has_annots'])
+
+        #         # aids = self.dset.gid_to_aids[gid]
+        #         #     to_remove.append(gid)
+        #         #     print('gid = {!r}'.format(gid))
 
         self.label_names = sorted(self.dset.name_to_cat,
                                   key=lambda n: self.dset.name_to_cat[n]['id'])
@@ -192,27 +199,29 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
             >>> assert len(labels) == 2
             >>> assert len(labels[0]) == len(images)
         """
-        def custom_collate_fn(inbatch):
-            # we know the order of data in __getitem__ so we can choose not to
-            # stack the variable length bboxes and labels
-            default_collate = torch_data.dataloader.default_collate
-            inimgs, inlabels = list(map(list, zip(*inbatch)))
-            imgs = default_collate(inimgs)
+        # def custom_collate_fn(inbatch):
+        #     # we know the order of data in __getitem__ so we can choose not to
+        #     # stack the variable length bboxes and labels
+        #     default_collate = torch_data.dataloader.default_collate
+        #     inimgs, inlabels = list(map(list, zip(*inbatch)))
+        #     imgs = default_collate(inimgs)
 
-            # Just transpose the list if we cant collate the labels
-            # However, try to collage each part.
-            n_labels = len(inlabels[0])
-            labels = [None] * n_labels
-            for i in range(n_labels):
-                simple = [x[i] for x in inlabels]
-                if ub.allsame(map(len, simple)):
-                    labels[i] = default_collate(simple)
-                else:
-                    labels[i] = simple
+        #     # Just transpose the list if we cant collate the labels
+        #     # However, try to collage each part.
+        #     n_labels = len(inlabels[0])
+        #     labels = [None] * n_labels
+        #     for i in range(n_labels):
+        #         simple = [x[i] for x in inlabels]
+        #         if ub.allsame(map(len, simple)):
+        #             labels[i] = default_collate(simple)
+        #         else:
+        #             labels[i] = simple
 
-            batch = imgs, labels
-            return batch
-        kwargs['collate_fn'] = custom_collate_fn
+        #     batch = imgs, labels
+        #     return batch
+        # # kwargs['collate_fn'] = custom_collate_fn
+        from clab.data import collate
+        kwargs['collate_fn'] = collate.list_collate
         loader = torch_data.DataLoader(self, *args, **kwargs)
         return loader
 
