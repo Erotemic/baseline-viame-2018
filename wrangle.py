@@ -254,8 +254,8 @@ def setup_yolo(cfg=None):
     # prefix = 'phase{}'.format(cfg.phase)
     train_dset, test_dset = make_test_train(merged)
 
-    check_images_exist(test_dset)
-    check_images_exist(train_dset)
+    test_dset.check_images_exist()
+    train_dset.check_images_exist()
 
     if 1:
         print(ub.repr2(train_dset.category_annotation_type_frequency(), nl=1, sk=1))
