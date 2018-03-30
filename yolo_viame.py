@@ -88,9 +88,20 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         self.check_images_exist()
 
         self = TorchCocoDataset()
+
+        # hack
+        img = np.random.rand(1000, 1000, 3)
+        import types
+        types.MethodType
+        def _load_image(self, index):
+            return img
+
+        inject_method(self, _load_image)
+
         for index in ub.ProgIter(range(len(self)), freq=1, adjust=0):
             try:
                 self[index]
+                # self._load_item(index, (10, 10))
             except IOError as ex:
                 print('index = {!r}'.format(index))
                 print('ex = {!r}\n'.format(ex))
