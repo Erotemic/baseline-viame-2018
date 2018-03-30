@@ -379,7 +379,7 @@ class YoloCocoDataset(TorchCocoDataset):
             >>> chw01, label = self[index]
             >>> hwc01 = chw01.numpy().transpose(1, 2, 0)
             >>> print(hwc01.shape)
-            >>> boxes, class_idxs = label
+            >>> boxes, gt_classes, orig_size, index, gt_weights = label
             >>> # xdoc: +REQUIRES(--show)
             >>> from clab.util import mplutil
             >>> mplutil.figure(doclf=True, fnum=1)
@@ -422,16 +422,25 @@ class YoloCocoDataset(TorchCocoDataset):
             # Ensure the same augmentor is used for bboxes and iamges
             seq_det = self.augmenter.to_deterministic()
 
-            hwc255 = seq_det.augment_image(hwc255)
+            try:
 
-            bbs = ia.BoundingBoxesOnImage(
-                [ia.BoundingBox(x1, y1, x2, y2)
-                 for x1, y1, x2, y2 in tlbr], shape=hwc255.shape)
-            bbs = seq_det.augment_bounding_boxes([bbs])[0]
+                hwc255 = seq_det.augment_image(hwc255)
 
-            tlbr = np.array([[bb.x1, bb.y1, bb.x2, bb.y2]
-                              for bb in bbs.bounding_boxes])
-            tlbr = yolo_utils.clip_boxes(tlbr, hwc255.shape[0:2])
+                bbs = ia.BoundingBoxesOnImage(
+                    [ia.BoundingBox(x1, y1, x2, y2)
+                     for x1, y1, x2, y2 in tlbr], shape=hwc255.shape)
+                bbs = seq_det.augment_bounding_boxes([bbs])[0]
+
+                tlbr = np.array([[bb.x1, bb.y1, bb.x2, bb.y2]
+                                  for bb in bbs.bounding_boxes])
+                tlbr = yolo_utils.clip_boxes(tlbr, hwc255.shape[0:2])
+
+            except Exception:
+                print('\n\n!!!!!!!!!!!\n\n')
+                print('tlbr = {}'.format(ub.repr2(tlbr, nl=1)))
+                print('ERROR index = {!r}'.format(index))
+                print('\n\n!!!!!!!!!!!\n\n')
+                raise
 
         chw01 = torch.FloatTensor(hwc255.transpose(2, 0, 1) / 255)
         gt_classes = torch.LongTensor(gt_classes)
