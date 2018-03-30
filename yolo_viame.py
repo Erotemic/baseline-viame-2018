@@ -109,19 +109,16 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         self.dset = CocoDataset(coco_fpath, img_root=img_root)
 
         # Hack: remove all images marked as has_annot, but with no annotations.
-        to_remove = []
-
+        # to_remove = []
         # if False:
         #     sets = []
         #     for gid, img in self.dset.imgs.items():
         #         sets.append(os.path.dirname(img['file_name']))
         #     ub.dict_hist(sets)
-
         #     for gid, img in self.dset.imgs.items():
         #         aids = self.dset.gid_to_aids.get(gid, [])
         #         if len(aids) == 0:
         #             print(img['has_annots'])
-
         #         # aids = self.dset.gid_to_aids[gid]
         #         #     to_remove.append(gid)
         #         #     print('gid = {!r}'.format(gid))
@@ -308,7 +305,7 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
     def _load_annotation(self, index):
         img = self.dset.dataset['images'][index]
         gid = img['id']
-        aids = self.dset.gid_to_aids[gid]
+        aids = self.dset.gid_to_aids.get(gid, [])
         boxes = []
         gt_labels = []
         for aid in aids:
