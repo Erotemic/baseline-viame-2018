@@ -88,10 +88,11 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         self.check_images_exist()
 
         self = TorchCocoDataset()
-        for index in ub.ProgIter(range(len(self))):
+        for index in ub.ProgIter(range(len(self)), freq=1, adjust=0):
             try:
-                self._load_image(index)
+                self[index]
             except IOError as ex:
+                print('index = {!r}'.format(index))
                 print('ex = {!r}\n'.format(ex))
 
         img = self.dset.dataset['images'][index]
@@ -321,7 +322,7 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
             boxes.append(box)
 
         annot = {
-            'boxes': np.array(boxes, dtype=np.float32),
+            'boxes': np.array(boxes, dtype=np.float32).reshape(-1, 4),
             'gt_classes': np.array(gt_labels),
         }
         return annot
