@@ -236,8 +236,13 @@ def setup_yolo(cfg=None):
     dsets = []
     for fpath in sorted(fpaths):
         print('reading fpath = {!r}'.format(fpath))
-        # hack = os.path.basename(fpath).split('-')[0].split('.')[0]
         dset = CocoDataset(fpath, tag='', img_root=cfg.img_root)
+        try:
+            dset.check_images_exist()
+        except AssertionError:
+            hack = os.path.basename(fpath).split('-')[0].split('.')[0]
+            dset = CocoDataset(fpath, tag=hack, img_root=cfg.img_root)
+            dset.check_images_exist()
         print(ub.repr2(dset.basic_stats()))
         dsets.append(dset)
 
@@ -248,17 +253,6 @@ def setup_yolo(cfg=None):
     # suffix = 'coarse-bbox-only'
     # prefix = 'phase{}'.format(cfg.phase)
     train_dset, test_dset = make_test_train(merged)
-
-    def check_images_exist(dset):
-        bad_paths = []
-        for index in ub.ProgIter(range(len(dset.dataset['images']))):
-            img = dset.dataset['images'][index]
-            gpath = join(dset.img_root, img['file_name'])
-            if not os.path.exists(gpath):
-                bad_paths.append((index, gpath))
-        if bad_paths:
-            print(ub.repr2(bad_paths, nl=1))
-            raise AssertionError('missing images')
 
     check_images_exist(test_dset)
     check_images_exist(train_dset)

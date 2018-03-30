@@ -763,6 +763,19 @@ class CocoDataset(ub.NiceRepr):
             self.cid_to_aids[cid] = []
             self.name_to_cat[name] = cat
 
+    def check_images_exist(dset):
+        import os
+        bad_paths = []
+        for index in ub.ProgIter(range(len(dset.dataset['images']))):
+            img = dset.dataset['images'][index]
+            gpath = join(dset.img_root, img['file_name'])
+            if not os.path.exists(gpath):
+                bad_paths.append((index, gpath))
+        if bad_paths:
+            print('bad paths:')
+            print(ub.repr2(bad_paths, nl=1))
+            raise AssertionError('missing images')
+
 
 def demo_coco_data():
     """
