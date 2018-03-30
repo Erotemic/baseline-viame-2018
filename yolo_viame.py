@@ -133,8 +133,7 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
     def check_images_exist(self):
         """
         Example:
-            >>> cfg = DataConfig.phase0()
-            >>> workdir = cfg.workdir
+            >>> cfg = DataConfig.phase1()
             >>> self = YoloCocoDataset(cfg.train_fpath, cfg.img_root)
             >>> self.check_images_exist()
             >>> self = YoloCocoDataset(cfg.vali_fapth, cfg.img_root)
@@ -222,13 +221,14 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
 
         Example:
             >>> self = TorchCocoDataset()
-            >>> index = 139
+            >>> index = 100
             >>> chw, label = self[index]
             >>> hwc = chw.numpy().transpose(1, 2, 0)
             >>> boxes, class_idxs = label
             >>> # xdoc: +REQUIRES(--show)
             >>> from clab.util import mplutil
             >>> mplutil.qtensure()  # xdoc: +SKIP
+            >>> mplutil.figure(fnum=1, doclf=True)
             >>> mplutil.imshow(hwc, colorspace='rgb')
             >>> mplutil.draw_boxes(boxes.numpy(), box_format='tlbr')
             >>> mplutil.show_if_requested()
