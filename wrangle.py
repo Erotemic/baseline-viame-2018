@@ -235,7 +235,8 @@ def setup_yolo(cfg=None):
     dsets = []
     for fpath in sorted(fpaths):
         print('reading fpath = {!r}'.format(fpath))
-        dset = CocoDataset(fpath, img_root='')
+        hack = basename(fpath).split('-')[0]
+        dset = CocoDataset(fpath, img_root=hack)
         print(ub.repr2(dset.basic_stats()))
         dsets.append(dset)
 
