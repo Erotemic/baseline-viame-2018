@@ -292,10 +292,12 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         boxes = []
         gt_labels = []
         for aid in aids:
-            box = np.array(self.dset.anns[aid]['bbox']).copy()
+            ann = self.dset.anns[aid]
+            if ann['area'] == 0:
+                continue
+            box = np.array(ann['bbox']).copy()
             box[2:4] += box[0:2]
-            cid = self.dset.anns[aid]['category_id']
-            cname = self.dset.cats[cid]['name']
+            cname = ann['name']
             cind = self._class_to_ind[cname]
             gt_labels.append(cind)
             boxes.append(box)
@@ -375,7 +377,7 @@ class YoloCocoDataset(TorchCocoDataset):
 
         Example:
             >>> self = YoloCocoDataset()
-            >>> index = 139
+            >>> index = 831
             >>> chw01, label = self[index]
             >>> hwc01 = chw01.numpy().transpose(1, 2, 0)
             >>> print(hwc01.shape)
