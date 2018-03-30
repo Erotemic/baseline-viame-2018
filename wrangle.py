@@ -232,15 +232,12 @@ def setup_yolo(cfg=None):
     print('fpaths = {!r}'.format(fpaths))
 
     print('Reading raw mscoco files')
+    import os
     dsets = []
     for fpath in sorted(fpaths):
         print('reading fpath = {!r}'.format(fpath))
-        import os
-        hack = os.path.basename(fpath).split('-')[0].split('.')[0]
-        # if hack == 'afsc_seq1':
-        #     hack == ''
-        dset = CocoDataset(fpath, tag='', img_root=hack)
-        # dset = CocoDataset(fpath)
+        # hack = os.path.basename(fpath).split('-')[0].split('.')[0]
+        dset = CocoDataset(fpath, tag='', img_root=cfg.img_root)
         print(ub.repr2(dset.basic_stats()))
         dsets.append(dset)
 
