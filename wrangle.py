@@ -175,9 +175,13 @@ def setup_yolo():
             --annotdir=/data/projects/noaa/phase1-annotations/*/*coarse-bbox-only*.json \
             --img_root=/data/projects/noaa/phase1-imagery \
             --work=$HOME/work/viame-challenge-2018
+
+    Ignore:
+        cfg = viame_wrangler.config.WrangleConfig()
+        cfg.annotdir = '/data/projects/noaa/phase1-annotations/*/*coarse-bbox-only*.json'
     """
     cfg = viame_wrangler.config.WrangleConfig()
-    # fine, coarse, fine_bbox, coarse_bbox = setup_data()
+
     fpaths = list(glob.glob(cfg.annots))
     print('fpaths = {!r}'.format(fpaths))
 
@@ -188,13 +192,13 @@ def setup_yolo():
         dset = CocoDataset(fpath)
         dsets.append(dset)
 
-    # suffix = 'coarse-bbox-only'
-    # prefix = 'phase{}'.format(cfg.phase)
-    train_dset, test_dset = make_test_train(coarse_bbox)
-
     print('Merging')
     merged = CocoDataset.union(*dsets)
     merged.img_root = cfg.img_root
+
+    # suffix = 'coarse-bbox-only'
+    # prefix = 'phase{}'.format(cfg.phase)
+    train_dset, test_dset = make_test_train(merged)
 
     print('Writing')
     train_fpath = join(cfg.workdir, 'train.mscoco.json')

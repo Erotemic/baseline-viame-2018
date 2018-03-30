@@ -14,20 +14,19 @@ class WrangleConfig(object):
         cfg.annots = ub.truepath(ub.argval('--annots', default='~/data/viame-challenge-2018/phase1-annotations', argv=argv))
 
         # cfg.challenge_data_dir = join(cfg.data_dir, 'viame-challenge-2018')
-        cfg.workdir = join(cfg.work_dir, 'viame-challenge-2018')
-        ub.ensuredir(cfg.challenge_work_dir)
+        ub.ensuredir(cfg.workdir)
 
-        if cfg.phase == '0':
-            cfg.img_root = join(cfg.challenge_data_dir, 'phase0-imagery')
-            cfg.annot_dir = join(cfg.challenge_data_dir, 'phase0-annotations')
-        elif cfg.phase == '1':
-            cfg.img_root = join(cfg.challenge_data_dir, 'phase1-imagery')
-            cfg.annot_dir = join(cfg.challenge_data_dir, 'phase1-annotations')
-        elif cfg.phase == 'full':
-            cfg.img_root = join(cfg.challenge_data_dir, 'phase0-imagery')
-            cfg.annot_dir = join(cfg.challenge_data_dir, 'full-datasets')
-        else:
-            raise KeyError(cfg.phase)
+        # if cfg.phase == '0':
+        #     cfg.img_root = join(cfg.challenge_data_dir, 'phase0-imagery')
+        #     cfg.annot_dir = join(cfg.challenge_data_dir, 'phase0-annotations')
+        # elif cfg.phase == '1':
+        #     cfg.img_root = join(cfg.challenge_data_dir, 'phase1-imagery')
+        #     cfg.annot_dir = join(cfg.challenge_data_dir, 'phase1-annotations')
+        # elif cfg.phase == 'full':
+        #     cfg.img_root = join(cfg.challenge_data_dir, 'phase0-imagery')
+        #     cfg.annot_dir = join(cfg.challenge_data_dir, 'full-datasets')
+        # else:
+        #     raise KeyError(cfg.phase)
 
 
 def download_phase0_annots():
