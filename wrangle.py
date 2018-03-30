@@ -238,11 +238,11 @@ def setup_yolo(cfg=None):
         print('reading fpath = {!r}'.format(fpath))
         dset = CocoDataset(fpath, tag='', img_root=cfg.img_root)
         try:
-            dset.check_images_exist()
+            assert not dset.missing_images()
         except AssertionError:
             hack = os.path.basename(fpath).split('-')[0].split('.')[0]
-            dset = CocoDataset(fpath, tag=hack, img_root=cfg.img_root)
-            dset.check_images_exist()
+            dset = CocoDataset(fpath, tag=hack, img_root=join(cfg.img_root, hack))
+            assert not dset.missing_images(), ub.repr2(dset.missing_images())
         print(ub.repr2(dset.basic_stats()))
         dsets.append(dset)
 
@@ -254,8 +254,8 @@ def setup_yolo(cfg=None):
     # prefix = 'phase{}'.format(cfg.phase)
     train_dset, test_dset = make_test_train(merged)
 
-    test_dset.check_images_exist()
-    train_dset.check_images_exist()
+    assert not train_dset.missing_images(), ub.repr2(train_dset.missing_images())
+    assert not test_dset.missing_images(), ub.repr2(train_dset.missing_images())
 
     if 1:
         print(ub.repr2(train_dset.category_annotation_type_frequency(), nl=1, sk=1))
