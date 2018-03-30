@@ -752,6 +752,8 @@ def setup_harness():
                 true_boxes = np.hstack([true_boxes_, true_weights[:, None]])
                 true_boxes[:, 0:4:2] *= sx
                 true_boxes[:, 1:4:2] *= sy
+            else:
+                true_boxes = true_boxes_.reshape(-1, 4)
 
             y = voc.EvaluateVOC.image_confusions(true_boxes, true_cxs,
                                                  pred_boxes, pred_scores,
