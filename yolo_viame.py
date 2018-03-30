@@ -297,7 +297,8 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
                 continue
             box = np.array(ann['bbox']).copy()
             box[2:4] += box[0:2]
-            cname = ann['name']
+            cid = ann['category_id']
+            cname = self.dset.cats[cid]['name']
             cind = self._class_to_ind[cname]
             gt_labels.append(cind)
             boxes.append(box)
