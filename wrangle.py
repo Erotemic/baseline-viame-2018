@@ -182,7 +182,7 @@ def setup_yolo(cfg=None):
         cfg.img_root = '/data/projects/noaa/phase1-imagery'
         cfg.work = ub.truepath('$HOME/work/viame-challenge-2018')
     """
-    if cfg is not None:
+    if cfg is None:
         cfg = viame_wrangler.config.WrangleConfig()
 
     fpaths = list(glob.glob(cfg.annots))
