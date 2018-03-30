@@ -275,7 +275,7 @@ class CocoDataset(ub.NiceRepr):
                         new_cat = ub.odict([
                             ('id', new_id),
                             ('name', old_cat['name']),
-                            ('supercategory', old_cat['supercategory']),
+                            # ('supercategory', old_cat['supercategory']),
                         ])
                         update_ifnotin(new_cat, old_cat)
                         merged['categories'].append(new_cat)

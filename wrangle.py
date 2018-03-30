@@ -172,13 +172,15 @@ def setup_yolo():
             --work=$HOME/work/viame-challenge-2018
 
         python ~/code/baseline-viame-2018/wrangle.py setup_yolo \
-            --annotdir=/data/projects/noaa/phase1-annotations/*/*coarse-bbox-only*.json \
+            --annots=/data/projects/noaa/phase1-annotations/*/*coarse-bbox-only*.json \
             --img_root=/data/projects/noaa/phase1-imagery \
             --work=$HOME/work/viame-challenge-2018
 
     Ignore:
         cfg = viame_wrangler.config.WrangleConfig()
-        cfg.annotdir = '/data/projects/noaa/phase1-annotations/*/*coarse-bbox-only*.json'
+        cfg.annots = '/data/projects/noaa/phase1-annotations/*/*coarse-bbox-only*.json'
+        cfg.img_root = '/data/projects/noaa/phase1-imagery'
+        cfg.work = ub.truepath('$HOME/work/viame-challenge-2018')
     """
     cfg = viame_wrangler.config.WrangleConfig()
 
@@ -187,7 +189,7 @@ def setup_yolo():
 
     print('Reading raw mscoco files')
     dsets = []
-    for fpath in fpaths:
+    for fpath in sorted(fpaths):
         print('reading fpath = {!r}'.format(fpath))
         dset = CocoDataset(fpath)
         dsets.append(dset)
