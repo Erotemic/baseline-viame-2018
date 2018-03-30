@@ -140,7 +140,9 @@ def setup_data():
 def make_test_train(merged):
     # Split into train / test  set
     print('Splitting')
-    skf = StratifiedGroupKFold(n_splits=2)
+    import numpy as np
+    rng = np.random.RandomState(0)
+    skf = StratifiedGroupKFold(n_splits=2, random_state=rng)
     groups = [ann['image_id'] for ann in merged.anns.values()]
     y = [ann['category_id'] for ann in merged.anns.values()]
     X = [ann['id'] for ann in merged.anns.values()]
@@ -151,11 +153,42 @@ def make_test_train(merged):
     aid_to_gid = {aid: ann['image_id'] for aid, ann in merged.anns.items()}
     train_aids = list(ub.take(X, train_idx))
     test_aids = list(ub.take(X, test_idx))
-    train_gids = sorted(set(ub.take(aid_to_gid, train_aids)))
-    test_gids = sorted(set(ub.take(aid_to_gid, test_aids)))
 
-    train_dset = merged.subset(train_gids)
-    test_dset = merged.subset(test_gids)
+    train_gids = set(ub.take(aid_to_gid, train_aids))
+    test_gids = set(ub.take(aid_to_gid, test_aids))
+
+    # Include images without any annotations
+    gids = set(merged.imgs.keys())
+
+    extra_gids = (gids - (train_gids | test_gids))
+
+    gids_maybe = []
+    gids_true = []
+    gids_false = []
+    for gid in extra_gids:
+        if merged.imgs[gid]['has_annots'] is None:
+            # There might actually be unannoted fish in these images
+            gids_maybe.append(gid)
+        elif merged.imgs[gid]['has_annots'] is False:
+            # We know there should not be any fish in this image
+            gids_false.append(gid)
+        elif merged.imgs[gid]['has_annots'] is True:
+            # There are fish in this image, but the annots were removed
+            gids_true.append(gid)
+        else:
+            assert False
+
+    rng.shuffle(gids_maybe)
+    rng.shuffle(gids_false)
+
+    train_gids.update(gids_false[0::2])
+    train_gids.update(gids_maybe[0::2])
+
+    test_gids.update(gids_false[1::2])
+    test_gids.update(gids_maybe[1::2])
+
+    train_dset = merged.subset(sorted(train_gids))
+    test_dset = merged.subset(sorted(test_gids))
 
     print('--- Training Stats ---')
     print(ub.repr2(train_dset.basic_stats()))
