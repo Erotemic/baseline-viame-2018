@@ -169,6 +169,13 @@ def make_test_train(merged):
         if 'has_annots' not in merged.imgs[gid]:
             merged.imgs[gid]['has_annots'] = None
 
+        if str(merged.imgs[gid]['has_annots']).lower() == 'false':
+            merged.imgs[gid]['has_annots'] = False
+        if str(merged.imgs[gid]['has_annots']).lower() == 'true':
+            merged.imgs[gid]['has_annots'] = True
+        if str(merged.imgs[gid]['has_annots']).lower() == 'null':
+            merged.imgs[gid]['has_annots'] = None
+
         if merged.imgs[gid]['has_annots'] is None:
             # There might actually be unannoted fish in these images
             gids_maybe.append(gid)
