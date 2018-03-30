@@ -56,14 +56,15 @@ class DataConfig(object):
 
     @classmethod
     def phase1(DataConfig):
-        import viame_wrangler
-        other = viame_wrangler.config.WrangleConfig()
+        # import viame_wrangler
+        # other = viame_wrangler.config.WrangleConfig()
+        # cfg.workdir = other.workdir
+        # cfg.img_root = other.img_root
 
         cfg = DataConfig()
-        cfg.workdir = other.workdir
-        cfg.img_root = other.img_root
-        cfg.train_fpath = join(other.workdir, 'train.mscoco.json')
-        cfg.vali_fapth = join(other.workdir, 'vali.mscoco.json')
+        cfg.workdir = ub.truepath(ub.argval('--work', default='~/work/viame-challenge-2018'))
+        cfg.train_fpath = join(cfg.workdir, 'train.mscoco.json')
+        cfg.vali_fapth = join(cfg.workdir, 'vali.mscoco.json')
         return cfg
 
 
@@ -92,7 +93,7 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
     def __init__(self, coco_fpath=None, img_root=None):
 
         if coco_fpath is None and img_root is None:
-            cfg = DataConfig.phase0()
+            cfg = DataConfig.phase1()
             coco_fpath = cfg.train_fpath
             img_root = cfg.img_root
 
@@ -511,8 +512,6 @@ def setup_harness():
     """
     if int(ub.argval('--phase', default=1)) == 1:
         cfg = DataConfig.phase1()
-        # hack
-        cfg.img_root = '/data/projects/noaa/phase1-imagery'
     else:
         assert False
         cfg = DataConfig.phase0()
