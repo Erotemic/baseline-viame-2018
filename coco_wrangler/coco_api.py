@@ -230,7 +230,7 @@ class CocoDataset(ub.NiceRepr):
         self.name_to_cat = {cat['name']: cat for cat in self.cats.values()}
 
     @classmethod
-    def union(CocoDataset, *others):
+    def union(CocoDataset, *others, **kw):
         """
         Merges multiple `CocoDataset` items into one. Does not retain old ids.
         """
@@ -315,7 +315,7 @@ class CocoDataset(ub.NiceRepr):
 
         dsets = [(d.img_root, d.dataset) for d in others]
         merged = _coco_union(dsets)
-        return CocoDataset(merged)
+        return CocoDataset(merged, **kw)
 
     def subset(self, sub_gids):
         """
