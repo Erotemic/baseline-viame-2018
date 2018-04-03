@@ -782,6 +782,8 @@ def train():
     """
     python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase0_b16 --phase=0 --batch_size=16 --workers=2 --gpu=0
     python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase1_b16 --phase=1 --batch_size=16 --workers=2 --gpu=0
+
+    python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase1_b32 --phase=1 --batch_size=32 --workers=4 --gpu=2,3
     """
     harn = setup_harness()
     with harn.xpu:

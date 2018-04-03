@@ -212,18 +212,18 @@ def setup_yolo(cfg=None):
     CommandLine:
         python ~/code/baseline-viame-2018/wrangle.py setup_yolo \
             --annots=$HOME/data/viame-challenge-2018/phase1-annotations \
-            --work=$HOME/work/viame-challenge-2018
+            --workdir=$HOME/work/viame-challenge-2018
 
         python ~/code/baseline-viame-2018/wrangle.py setup_yolo \
             --annots=/data/projects/noaa/phase1-annotations/*/*coarse-bbox-only*.json \
             --img_root=/data/projects/noaa/phase1-imagery \
-            --work=$HOME/work/viame-challenge-2018
+            --workdir=$HOME/work/viame-challenge-2018
 
     Ignore:
         cfg = viame_wrangler.config.WrangleConfig()
         cfg.annots = '/data/projects/noaa/phase1-annotations/*/*coarse-bbox-only*.json'
         cfg.img_root = '/data/projects/noaa/phase1-imagery'
-        cfg.work = ub.truepath('$HOME/work/viame-challenge-2018')
+        cfg.workdir = ub.truepath('$HOME/work/viame-challenge-2018')
     """
     if cfg is None:
         cfg = viame_wrangler.config.WrangleConfig()

@@ -5,13 +5,24 @@ import ubelt as ub
 
 
 class WrangleConfig(object):
-    def __init__(cfg, argv=None):
+    def __init__(cfg, kw=None, argv=None):
         # cfg.phase = ub.argval('--phase', default='1', argv=argv)
         # cfg.data_dir = ub.truepath(ub.argval('--data', default='~/data', argv=argv))
+        if kw is None:
+            kw = {}
 
-        cfg.workdir = ub.truepath(ub.argval('--work', default='~/work/viame-challenge-2018', argv=argv))
-        cfg.img_root = ub.truepath(ub.argval('--img_root', default='~/data/viame-challenge-2018/phase1-imagery', argv=argv))
-        cfg.annots = ub.truepath(ub.argval('--annots', default='~/data/viame-challenge-2018/phase1-annotations/*.json', argv=argv))
+        def _parse_value(key, default):
+            """ argv > kw > default """
+            # constructor overrides default
+            default = kw.get(key, default)
+            # argv overrides constructor
+            value = ub.argval('--' + key, default=default, argv=argv)
+            value = ub.truepath(value)
+            setattr(cfg, key, value)
+
+        _parse_value('workdir', '~/work/viame-challenge-2018')
+        _parse_value('img_root', '~/work/viame-challenge-2018/phase1-imagery')
+        _parse_value('annots', '~/data/viame-challenge-2018/phase1-annotations/*.json')
 
         # cfg.challenge_data_dir = join(cfg.data_dir, 'viame-challenge-2018')
         ub.ensuredir(cfg.workdir)
