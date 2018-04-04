@@ -128,6 +128,7 @@ def make_dataset_flavors(dset, dpath, dset_name):
     fine = dset.copy()
     FineGrainedChallenge = viame_wrangler.mappings.FineGrainedChallenge
     fine.rename_categories(FineGrainedChallenge.raw_to_cat)
+    ensure_heirarchy(fine, FineGrainedChallenge.heirarchy)
     verbose_dump(fine, join(dpath, dset_name + '-fine-bbox-keypoint.mscoco.json'))
 
     # remove keypoint annotations
