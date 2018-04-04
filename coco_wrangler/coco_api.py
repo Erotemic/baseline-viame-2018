@@ -722,13 +722,13 @@ class CocoDataset(ub.NiceRepr):
             aids = self.gid_to_aids.get(gid, [])
             # If there is at least one annotation, always mark as has_annots
             if len(aids) > 0:
-                assert getattr(img, 'has_annots', None) is not False, (
-                    'image with annots was explictly labeled as False!')
+                assert img.get('has_annots', ub.NoParam) in [ub.NoParam, True], (
+                    'image with annots was explictly labeled as non-True!')
                 img['has_annots'] = True
             else:
                 # Otherwise set has_annots to null if it has not been
                 # explicitly labeled
-                if not hasattr(img, 'has_annots'):
+                if 'has_annots' not in img:
                     img['has_annots'] = None
 
     def _find_bad_annotations(self):
@@ -736,6 +736,12 @@ class CocoDataset(ub.NiceRepr):
         for ann in self.dataset['annotations']:
             if ann['image_id'] is None or ann['category_id'] is None:
                 to_remove.append(ann)
+            else:
+                if ann['image_id'] not in self.imgs:
+                    to_remove.append(ann)
+                if ann['category_id'] not in self.cats:
+                    to_remove.append(ann)
+
         return to_remove
 
     def remove_annotation(self, aid_or_ann):
