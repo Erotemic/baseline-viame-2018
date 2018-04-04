@@ -227,15 +227,15 @@ def nx_ascii_tree(graph, key=None):
 def printable_heirarchy():
     fine = read_fine_merged()
     coarse = read_coarse_merged()
+    # from viame_wrangler import mappings
 
     # COARSE CAT
 
     import networkx as nx
     g = nx.DiGraph()
-    from viame_wrangler import mappings
-    # for cat in dset.cats.values():
-    # for cat in dset.dataset['fine_categories']:
-    for cat in mappings.CoarseChallenge.heirarchy:
+    for cat in coarse.cats.values():
+        # for cat in dset.dataset['fine_categories']:
+        # for cat in mappings.CoarseChallenge.heirarchy:
         g.add_node(cat['name'])
         if 'supercategory' in cat:
             g.add_edge(cat['supercategory'], cat['name'])
@@ -253,10 +253,9 @@ def printable_heirarchy():
 
     import networkx as nx
     g = nx.DiGraph()
-    from viame_wrangler import mappings
-    # for cat in dset.cats.values():
-    # for cat in dset.dataset['fine_categories']:
-    for cat in mappings.FineGrainedChallenge.heirarchy:
+    for cat in fine.cats.values():
+        # for cat in dset.dataset['fine_categories']:
+        # for cat in mappings.FineGrainedChallenge.heirarchy:
         g.add_node(cat['name'])
         if 'supercategory' in cat:
             g.add_edge(cat['supercategory'], cat['name'])

@@ -94,18 +94,18 @@ def regenerate_phase1_flavors():
     for fpath in fpaths:
         print('reading fpath = {!r}'.format(fpath))
         dset_name = os.path.basename(fpath).replace('original_', '').split('.')[0]
-        dset = CocoDataset(fpath, img_root=cfg.img_root, tag=dset_name)
+        orig_dset = CocoDataset(fpath, img_root=cfg.img_root, tag=dset_name)
         dpath = os.path.dirname(fpath)
 
-        assert not dset.missing_images()
-        assert not dset._find_bad_annotations()
-        assert all([img['has_annots'] in [True, False, None] for img in dset.imgs.values()])
-        print(ub.dict_hist([g['has_annots'] for g in dset.imgs.values()]))
+        assert not orig_dset.missing_images()
+        assert not orig_dset._find_bad_annotations()
+        assert all([img['has_annots'] in [True, False, None] for img in orig_dset.imgs.values()])
+        print(ub.dict_hist([g['has_annots'] for g in orig_dset.imgs.values()]))
 
-        make_dataset_flavors(dset, dpath, dset_name)
+        make_dataset_flavors(orig_dset, dpath, dset_name)
 
 
-def make_dataset_flavors(dset, dpath, dset_name):
+def make_dataset_flavors(orig_dset, dpath, dset_name):
     import viame_wrangler.mappings
     def ensure_heirarchy(dset, heirarchy):
         for cat in heirarchy:
@@ -125,7 +125,7 @@ def make_dataset_flavors(dset, dpath, dset_name):
         dset.dump(fpath)
 
     ### FINE-GRAIND DSET  ###
-    fine = dset.copy()
+    fine = orig_dset.copy()
     FineGrainedChallenge = viame_wrangler.mappings.FineGrainedChallenge
     fine.rename_categories(FineGrainedChallenge.raw_to_cat)
     ensure_heirarchy(fine, FineGrainedChallenge.heirarchy)
@@ -138,7 +138,7 @@ def make_dataset_flavors(dset, dpath, dset_name):
     verbose_dump(fine_bbox, join(dpath, dset_name + '-fine-bbox-only.mscoco.json'))
 
     ### COARSE DSET  ###
-    coarse = dset.copy()
+    coarse = orig_dset.copy()
     CoarseChallenge = viame_wrangler.mappings.CoarseChallenge
     coarse.rename_categories(CoarseChallenge.raw_to_cat)
     ensure_heirarchy(coarse, CoarseChallenge.heirarchy)
@@ -148,3 +148,42 @@ def make_dataset_flavors(dset, dpath, dset_name):
     coarse_bbox = coarse.copy()
     coarse_bbox._remove_keypoint_annotations()
     verbose_dump(coarse_bbox, join(dpath, dset_name + '-coarse-bbox-only.mscoco.json'))
+
+
+def generate_phase1_data_tables():
+    cfg = viame_wrangler.config.WrangleConfig({
+        'annots': ub.truepath('~/data/viame-challenge-2018/phase1-annotations/*/*coarse*bbox-keypoint*.json')
+    })
+
+    all_stats = {}
+
+    annots = cfg.annots
+    fpaths = list(glob.glob(annots))
+    print('fpaths = {}'.format(ub.repr2(fpaths)))
+    for fpath in fpaths:
+        dset_name = os.path.basename(fpath).split('-')[0]
+        dset = CocoDataset(fpath, img_root=cfg.img_root, tag=dset_name)
+
+        assert not dset.missing_images()
+        assert not dset._find_bad_annotations()
+        assert all([img['has_annots'] in [True, False, None] for img in dset.imgs.values()])
+
+        print(ub.dict_hist([g['has_annots'] for g in dset.imgs.values()]))
+
+        stats = {}
+        stats.update(ub.dict_subset(dset.basic_stats(), ['n_anns', 'n_imgs']))
+
+        roi_shapes_hist = dict()
+        populated_cats = dict()
+        for name, item in dset.category_annotation_type_frequency().items():
+            if item:
+                populated_cats[name] = sum(item.values())
+                for k, v in item.items():
+                    roi_shapes_hist[k] = roi_shapes_hist.get(k, 0) + v
+
+        stats['n_cats'] = populated_cats
+        stats['n_roi_shapes'] = roi_shapes_hist
+        stats['n_imgs_with_annots'] = ub.map_keys({None: 'unsure', True: 'has_objects', False: 'no_objects'}, ub.dict_hist([g['has_annots'] for g in dset.imgs.values()]))
+        all_stats[dset_name] = stats
+
+    print(ub.repr2(all_stats, nl=3, sk=1))
