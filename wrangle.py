@@ -74,11 +74,14 @@ def setup_data():
     CommandLine:
         python ~/code/baseline-viame-2018/wrangle.py setup_data --data=$HOME/data --work=$HOME/work --phase=0
     """
-    cfg = viame_wrangler.config.WrangleConfig()
+    # cfg = viame_wrangler.config.WrangleConfig()
+    cfg = viame_wrangler.config.WrangleConfig({
+        'annots': ub.truepath('~/data/viame-challenge-2018/phase1-annotations/*/original_*.json')
+    })
 
     img_root = cfg.img_root
-    annot_dir = cfg.annot_dir
-    fpaths = list(glob.glob(join(annot_dir, '*.json')))
+    annots = cfg.annots
+    fpaths = list(glob.glob(annots))
 
     print('Reading raw mscoco files')
     dsets = []

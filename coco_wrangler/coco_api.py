@@ -731,6 +731,13 @@ class CocoDataset(ub.NiceRepr):
                 if not hasattr(img, 'has_annots'):
                     img['has_annots'] = None
 
+    def _find_bad_annotations(self):
+        to_remove = []
+        for ann in self.dataset['annotations']:
+            if ann['image_id'] is None or ann['category_id'] is None:
+                to_remove.append(ann)
+        return to_remove
+
     def remove_annotation(self, aid_or_ann):
         if isinstance(aid_or_ann, int):
             remove_ann = None

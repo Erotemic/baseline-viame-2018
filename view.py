@@ -22,15 +22,92 @@ def _read(cfg):
             dset = CocoDataset(fpath, tag=hack, img_root=join(cfg.img_root, hack))
             print(ub.repr2(dset.missing_images()))
             assert not dset.missing_images(), 'missing!'
+
+        bad_annots = dset._find_bad_annotations()
+        if bad_annots:
+
+            print(ub.repr2(bad_annots))
+            assert False, 'bad annotatinos'
+
         print(ub.repr2(dset.basic_stats()))
         dsets.append(dset)
 
     print('Merging')
     merged = CocoDataset.union(*dsets, autobuild=False)
-    merged._remove_bad_annotations()
+    # merged._remove_bad_annotations()
     merged.img_root = cfg.img_root
     merged._build_index()
     return merged
+
+
+def fixup(cfg):
+    annot_fpaths = glob.glob(cfg.annots)
+    print('annot_fpaths = {}'.format(ub.repr2(annot_fpaths)))
+
+    print('Reading raw mscoco files')
+    dsets = []
+    for fpath in sorted(annot_fpaths):
+        print('reading fpath = {!r}'.format(fpath))
+        dset = CocoDataset(fpath, tag='', img_root=cfg.img_root)
+
+        bad_images = dset.missing_images()
+        if bad_images:
+            print('bad_images = {}'.format(ub.repr2(bad_images)))
+            dset_name = os.path.basename(fpath).split('-')[0].split('.')[0]
+            print('dset_name = {!r}'.format(dset_name))
+
+        bad_annots = dset._find_bad_annotations()
+        if bad_annots:
+            print('fpath = {!r}'.format(fpath))
+            print(ub.repr2(bad_annots))
+            assert False, 'bad annotatinos'
+
+        print(ub.repr2(dset.basic_stats()))
+        dsets.append(dset)
+
+
+def fix_dataset_phase1_original():
+    cfg = viame_wrangler.config.WrangleConfig({
+        'annots': ub.truepath('~/data/viame-challenge-2018/phase1-annotations/*/original_*.json')
+    })
+
+    annots = cfg.annots
+    fpaths = list(glob.glob(annots))
+    print('Reading raw mscoco files')
+    for fpath in fpaths:
+        print('reading fpath = {!r}'.format(fpath))
+        dset = CocoDataset(fpath, img_root=cfg.img_root)
+        dset_name = dset.tag.replace('original_', '')
+        if dset.missing_images():
+            for img in dset.dataset['images']:
+                if img['file_name'].startswith(dset_name):
+                    assert False
+                img['file_name'] = join(dset_name, img['file_name'])
+            assert not dset.missing_images()
+        self = dset
+        self.dataset.keys()
+        self.dataset['categories']
+
+        bad_annots = dset._find_bad_annotations()
+
+
+
+def fix_dataset_phase1_issues(dset, dset_name):
+    if dset.missing_images():
+        # prepend the dataset name to the image file_names
+        for img in dset.dataset['images']:
+            if img['file_name'].startswith(dset_name):
+                assert False
+            img['file_name'] = join(dset_name, img['file_name'])
+        assert not dset.missing_images()
+
+    self = dset
+    self.dataset.keys()
+    self.dataset['categories']
+
+    {ann['category_id'] for ann in self.dataset['annotations']}
+
+    bad_annots = dset._find_bad_annotations()
 
 
 def read_fine_merged():
