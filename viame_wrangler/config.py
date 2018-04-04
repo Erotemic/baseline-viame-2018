@@ -49,7 +49,6 @@ class WrangleConfig(Config):
         }, kw, argv)
         for key in cfg._keys:
             cfg[key] = ub.truepath(cfg[key])
-            ub.ensuredir(cfg[key])
 
 
 def _grabdata_girder(dpath, fname, hash, url, force=False):
