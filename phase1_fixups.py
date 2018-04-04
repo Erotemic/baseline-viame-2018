@@ -187,3 +187,21 @@ def generate_phase1_data_tables():
         all_stats[dset_name] = stats
 
     print(ub.repr2(all_stats, nl=3, sk=1))
+
+
+def run_checks():
+    cfg = viame_wrangler.config.WrangleConfig({
+        'annots': ub.truepath('~/data/viame-challenge-2018/phase1-annotations/*/*.json')
+    })
+    fpaths = list(glob.glob(cfg.annots))
+    print('fpaths = {}'.format(ub.repr2(fpaths)))
+
+    for fpath in fpaths:
+        dset_name = os.path.basename(fpath).split('-')[0].split('.')[0]
+        dset = CocoDataset(fpath, img_root=cfg.img_root, tag=dset_name)
+
+        assert not dset.missing_images()
+        assert not dset._find_bad_annotations()
+        assert all([img['has_annots'] in [True, False, None] for img in dset.imgs.values()])
+        if 'original' not in dset_name:
+            assert len(dset.cats) in [106, 21]
