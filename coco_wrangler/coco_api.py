@@ -128,23 +128,33 @@ class CocoDataset(ub.NiceRepr):
             parts.append(info)
         return ', '.join(parts)
 
+    def dumps(self, indent=4):
+        """
+        Writes the dataset out to the json format
+
+        Example:
+            >>> from coco_wrangler.coco_api import *
+            >>> dataset = demo_coco_data()
+            >>> self = CocoDataset(dataset, tag='demo')
+            >>> text = self.dumps()
+            >>> print(text)
+            >>> self2 = CocoDataset(json.loads(text), tag='demo2')
+            >>> assert self2.dataset == self.dataset
+            >>> assert self2.dataset is not self.dataset
+        """
+        from six.moves import cStringIO as StringIO
+        fp = StringIO()
+        self.dump(fp, indent=indent)
+        fp.seek(0)
+        text = fp.read()
+        return text
+
     def dump(self, file, indent=4):
         """
         Writes the dataset out to the json format
 
         Args:
             file (str of stream)
-
-        Example:
-            >>> from coco_wrangler.coco_api import *
-            >>> from six.moves import cStringIO as StringIO
-            >>> dataset = demo_coco_data()
-            >>> self = CocoDataset(dataset, tag='demo')
-            >>> fp = StringIO()
-            >>> self.dump(fp)
-            >>> fp.seek(0)
-            >>> text = fp.read()
-            >>> print(text)
         """
         if isinstance(file, six.string_types):
             with open(file, 'w') as fp:
@@ -198,6 +208,13 @@ class CocoDataset(ub.NiceRepr):
             except KeyError:
                 raise KeyError('Annotation does not have ids {}'.format(ann))
 
+            if not isinstance(aid, int):
+                raise TypeError('bad aid={} type={}'.format(aid, type(aid)))
+            if not isinstance(gid, int):
+                raise TypeError('bad gid={} type={}'.format(gid, type(gid)))
+            if not isinstance(cid, int):
+                raise TypeError('bad cid={} type={}'.format(cid, type(cid)))
+
             gid_to_aids[gid].add(aid)
             cid_to_gids[cid].add(gid)
             cid_to_aids[cid].add(aid)
@@ -226,15 +243,25 @@ class CocoDataset(ub.NiceRepr):
         self.gid_to_aids = ub.map_vals(sorted, gid_to_aids)
         self.cid_to_gids = ub.map_vals(sorted, cid_to_gids)
         self.cid_to_aids = ub.map_vals(sorted, cid_to_aids)
-
         self.name_to_cat = {cat['name']: cat for cat in self.cats.values()}
+
+    def _clear_index(self):
+        self.anns = None
+        self.imgs = None
+        self.cats = None
+        self.gid_to_aids = None
+        self.cid_to_gids = None
+        self.cid_to_aids = None
+        self.name_to_cat = None
 
     @classmethod
     def union(CocoDataset, *others, **kw):
         """
         Merges multiple `CocoDataset` items into one. Does not retain old ids.
+
+        TODO: are supercategories broken?
         """
-        def _coco_union(dsets):
+        def _coco_union(relative_dsets):
             """ union of dictionary based data structure """
             merged = ub.odict([
                 ('categories', []),
@@ -253,7 +280,7 @@ class CocoDataset(ub.NiceRepr):
                         d1[k] = v
                 return d1
 
-            for subdir, old_dset in dsets:
+            for subdir, old_dset in relative_dsets:
                 # Create temporary indexes to map from old to new
                 cat_id_map = {}
                 img_id_map = {}
@@ -299,11 +326,15 @@ class CocoDataset(ub.NiceRepr):
                     new_cat_id = cat_id_map.get(old_cat_id, None)
                     new_img_id = img_id_map.get(old_img_id, None)
                     if new_cat_id is None:
-                        print('annot {} in {} has bad category-id {}'.format(
-                            old_annot['id'], subdir, old_cat_id))
+                        warnings.warn('annot {} in {} has bad category-id {}'.format(
+                            old_annot, subdir, old_cat_id))
+                        # raise Exception
                     if new_img_id is None:
-                        print('annot {} in {} has bad image-id {}'.format(
-                            old_annot['id'], subdir, old_img_id))
+                        warnings.warn('annot {} in {} has bad image-id {}'.format(
+                            old_annot, subdir, old_img_id))
+                        # sanity check:
+                        # if any(img['id'] == old_img_id for img in old_dset['images']):
+                        #     raise Exception('Image id {} does not exist in {}'.format(old_img_id, subdir))
                     new_annot = ub.odict([
                         ('id', len(merged['annotations']) + 1),
                         ('image_id', new_img_id),
@@ -313,8 +344,8 @@ class CocoDataset(ub.NiceRepr):
                     merged['annotations'].append(new_annot)
             return merged
 
-        dsets = [(d.img_root, d.dataset) for d in others]
-        merged = _coco_union(dsets)
+        relative_dsets = [(d.img_root, d.dataset) for d in others]
+        merged = _coco_union(relative_dsets)
         return CocoDataset(merged, **kw)
 
     def subset(self, sub_gids):
@@ -372,6 +403,10 @@ class CocoDataset(ub.NiceRepr):
     def show_annotation(self, primary_aid=None, gid=None):
         """
         Use matplotlib to show an image with annotations overlaid
+
+        Ignore:
+            >>> from netharn.util import mplutil
+            >>> mplutil.qtensure()
         """
         import matplotlib as mpl
         from matplotlib import pyplot as plt
@@ -696,7 +731,24 @@ class CocoDataset(ub.NiceRepr):
                 if not hasattr(img, 'has_annots'):
                     img['has_annots'] = None
 
-    def _remove_keypoint_annotations(self):
+    def remove_annotation(self, aid_or_ann):
+        if isinstance(aid_or_ann, int):
+            remove_ann = None
+            if self.anns is not None:
+                remove_ann = self.anns[aid_or_ann]
+            else:
+                for ann in self.dataset['annotations']:
+                    if ann['id'] == aid_or_ann:
+                        remove_ann = ann
+                        break
+                if not remove_ann:
+                    raise IndexError('aid {} not in dataset'.format(aid_or_ann))
+        else:
+            remove_ann = aid_or_ann
+        self.dataset['annotations'].remove(remove_ann)
+        self._clear_index()
+
+    def _remove_keypoint_annotations(self, rebuild=True):
         to_remove = []
         for ann in self.dataset['annotations']:
             if ann['roi_shape'] == 'keypoints':
@@ -704,9 +756,10 @@ class CocoDataset(ub.NiceRepr):
         print('Removing {} keypoint annotations'.format(len(to_remove)))
         for ann in to_remove:
             self.dataset['annotations'].remove(ann)
-        self._build_index()
+        if rebuild:
+            self._build_index()
 
-    def _remove_bad_annotations(self):
+    def _remove_bad_annotations(self, rebuild=True):
         to_remove = []
         for ann in self.dataset['annotations']:
             if ann['image_id'] is None or ann['category_id'] is None:
@@ -714,9 +767,10 @@ class CocoDataset(ub.NiceRepr):
         print('Removing {} bad annotations'.format(len(to_remove)))
         for ann in to_remove:
             self.dataset['annotations'].remove(ann)
-        self._build_index()
+        if rebuild:
+            self._build_index()
 
-    def _remove_radius_annotations(self):
+    def _remove_radius_annotations(self, rebuild=False):
         to_remove = []
         for ann in self.dataset['annotations']:
             if 'radius' in ann:
@@ -724,7 +778,8 @@ class CocoDataset(ub.NiceRepr):
         print('Removing {} radius annotations'.format(len(to_remove)))
         for ann in to_remove:
             self.dataset['annotations'].remove(ann)
-        self._build_index()
+        if rebuild:
+            self._build_index()
 
     def _remove_empty_images(self):
         to_remove = []
