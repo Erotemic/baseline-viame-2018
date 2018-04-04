@@ -45,7 +45,7 @@ def read_fine_merged():
         # 'img_root': '~/data/viame-challenge-2018/phase0-imagery',
         # 'annots': '~/data/viame-challenge-2018/phase0-fine*keypoint*.json'
         'img_root': '~/data/viame-challenge-2018/phase1-imagery',
-        'annots': '~/data/viame-challenge-2018/phase1-annotations/*/phase1-fine*keypoint*.json'
+        'annots': '~/data/viame-challenge-2018/phase1-annotations/*/*fine*keypoint*.json'
         # 'img_root': '/data/projects/noaa/phase1-imagery',
         # 'annots': '/data/projects/noaa/phase1-annotations/*/*fine*-keypoint*',
     })
@@ -57,8 +57,8 @@ def read_coarse_merged():
     cfg = viame_wrangler.config.WrangleConfig({
         # 'img_root': '~/work/viame-challenge-2018/phase0-imagery',
         # 'annots': '~/work/viame-challenge-2018/phase0-fine*keypoint*.json'
-        'img_root': '/data/projects/noaa/phase1-imagery',
-        'annots': '/data/projects/noaa/phase1-annotations/*/*coarse*-keypoint*',
+        'img_root': '~/data/viame-challenge-2018/phase1-imagery',
+        'annots': '~/data/viame-challenge-2018/phase1-annotations/*/*coarse*-keypoint*',
     })
     merged = _read(cfg)
     return merged
