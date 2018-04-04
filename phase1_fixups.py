@@ -95,57 +95,55 @@ def regenerate_phase1_flavors():
         print('reading fpath = {!r}'.format(fpath))
         dset_name = os.path.basename(fpath).replace('original_', '').split('.')[0]
         dset = CocoDataset(fpath, img_root=cfg.img_root, tag=dset_name)
+        dpath = os.path.dirname(fpath)
 
         assert not dset.missing_images()
         assert not dset._find_bad_annotations()
         assert all([img['has_annots'] in [True, False, None] for img in dset.imgs.values()])
         print(ub.dict_hist([g['has_annots'] for g in dset.imgs.values()]))
 
-        def ensure_heirarchy(dset, heirarchy):
-            for cat in heirarchy:
-                try:
-                    dset.add_category(**cat)
-                except ValueError:
-                    realcat = dset.name_to_cat[cat['name']]
-                    realcat['supercategory'] = cat['supercategory']
-
-        prefix = 'phase{}'.format(cfg.phase)
-
-        def verbose_dump(dset, fpath):
-            print('Dumping {}'.format(fpath))
-            if False:
-                print(ub.repr2(dset.category_annotation_type_frequency(), nl=1, sk=1))
-            print(ub.dict_hist([img['has_annots'] for img in dset.imgs.values()]))
-            print(ub.repr2(dset.basic_stats()))
-            dset.dump(fpath)
-
-        ### FINE-GRAIND DSET  ###
-        fine = merged.copy()
-        FineGrainedChallenge = viame_wrangler.mappings.FineGrainedChallenge
-        fine.rename_categories(FineGrainedChallenge.raw_to_cat)
-        verbose_dump(fine, join(cfg.challenge_work_dir, prefix + '-fine-bbox-keypoint.mscoco.json'))
-
-        # remove keypoint annotations
-        # Should we remove the images that have keypoints in them?
-        fine_bbox = fine.copy()
-        fine_bbox._remove_keypoint_annotations()
-        verbose_dump(fine_bbox, join(cfg.challenge_work_dir, prefix + '-fine-bbox-only.mscoco.json'))
-
-        ### COARSE DSET  ###
-        coarse = merged.copy()
-        CoarseChallenge = viame_wrangler.mappings.CoarseChallenge
-        coarse.rename_categories(CoarseChallenge.raw_to_cat)
-        ensure_heirarchy(coarse, CoarseChallenge.heirarchy)
-        verbose_dump(coarse, join(cfg.challenge_work_dir, prefix + '-coarse-bbox-keypoint.mscoco.json'))
-
-        # remove keypoint annotations
-        coarse_bbox = coarse.copy()
-        coarse_bbox._remove_keypoint_annotations()
-        verbose_dump(coarse_bbox, join(cfg.challenge_work_dir, prefix + '-coarse-bbox-only.mscoco.json'))
+        make_dataset_flavors(dset, dpath, dset_name)
 
 
-        # for img in dset.dataset['images']:
-        #     print(img)
-        #     print(img.keys())
-        #     pass
+def make_dataset_flavors(dset, dpath, dset_name):
+    import viame_wrangler.mappings
+    def ensure_heirarchy(dset, heirarchy):
+        for cat in heirarchy:
+            try:
+                dset.add_category(**cat)
+            except ValueError:
+                realcat = dset.name_to_cat[cat['name']]
+                realcat['supercategory'] = cat['supercategory']
 
+    def verbose_dump(dset, fpath):
+        print('Dumping {}'.format(fpath))
+        print('dset_name = {!r}'.format(dset_name))
+        if False:
+            print(ub.repr2(dset.category_annotation_type_frequency(), nl=1, sk=1))
+        print(ub.dict_hist([img['has_annots'] for img in dset.imgs.values()]))
+        print(ub.repr2(dset.basic_stats()))
+        dset.dump(fpath)
+
+    ### FINE-GRAIND DSET  ###
+    fine = dset.copy()
+    FineGrainedChallenge = viame_wrangler.mappings.FineGrainedChallenge
+    fine.rename_categories(FineGrainedChallenge.raw_to_cat)
+    verbose_dump(fine, join(dpath, dset_name + '-fine-bbox-keypoint.mscoco.json'))
+
+    # remove keypoint annotations
+    # Should we remove the images that have keypoints in them?
+    fine_bbox = fine.copy()
+    fine_bbox._remove_keypoint_annotations()
+    verbose_dump(fine_bbox, join(dpath, dset_name + '-fine-bbox-only.mscoco.json'))
+
+    ### COARSE DSET  ###
+    coarse = dset.copy()
+    CoarseChallenge = viame_wrangler.mappings.CoarseChallenge
+    coarse.rename_categories(CoarseChallenge.raw_to_cat)
+    ensure_heirarchy(coarse, CoarseChallenge.heirarchy)
+    verbose_dump(coarse, join(dpath, dset_name + '-coarse-bbox-keypoint.mscoco.json'))
+
+    # remove keypoint annotations
+    coarse_bbox = coarse.copy()
+    coarse_bbox._remove_keypoint_annotations()
+    verbose_dump(coarse_bbox, join(dpath, dset_name + '-coarse-bbox-only.mscoco.json'))

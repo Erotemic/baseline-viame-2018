@@ -574,14 +574,14 @@ class CocoDataset(ub.NiceRepr):
             old_to_new_id[old_cat['id']] = new_cat['id']
             old_cat['supercategory'] = new_name
 
-        self.dataset['fine_categories'] = old_cats
+        # self.dataset['fine_categories'] = old_cats
         self.dataset['categories'] = new_cats
 
         for ann in self.dataset['annotations']:
             old_id = ann['category_id']
             new_id = old_to_new_id[old_id]
             ann['category_id'] = new_id
-            ann['fine_category_id'] = old_id
+            # ann['fine_category_id'] = old_id
 
         self._build_index()
 
