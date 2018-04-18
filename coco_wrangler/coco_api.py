@@ -745,21 +745,41 @@ class CocoDataset(ub.NiceRepr):
         return to_remove
 
     def remove_annotation(self, aid_or_ann):
+        remove_ann = self._resolve_to_ann(aid_or_ann)
+        self.dataset['annotations'].remove(remove_ann)
+        self._clear_index()
+
+    def remove_annotations(self, aids_or_anns):
+        """
+        Example:
+            >>> self = CocoDataset(demo_coco_data(), tag='demo')
+            >>> aids_or_anns = [self.anns[2], 3, 4, self.anns[1]]
+            >>> self.remove_annotations(aids_or_anns)
+            >>> assert len(self.dataset['annotations']) == 7
+        """
+        remove_anns = list(map(self._resolve_to_ann, aids_or_anns))
+        for ann in remove_anns:
+            self.dataset['annotations'].remove(ann)
+        self._clear_index()
+
+    def _resolve_to_ann(self, aid_or_ann):
+        """
+        Ensures output is an annotation dictionary
+        """
         if isinstance(aid_or_ann, int):
-            remove_ann = None
+            resolved_ann = None
             if self.anns is not None:
-                remove_ann = self.anns[aid_or_ann]
+                resolved_ann = self.anns[aid_or_ann]
             else:
                 for ann in self.dataset['annotations']:
                     if ann['id'] == aid_or_ann:
-                        remove_ann = ann
+                        resolved_ann = ann
                         break
-                if not remove_ann:
+                if not resolved_ann:
                     raise IndexError('aid {} not in dataset'.format(aid_or_ann))
         else:
-            remove_ann = aid_or_ann
-        self.dataset['annotations'].remove(remove_ann)
-        self._clear_index()
+            resolved_ann = aid_or_ann
+        return resolved_ann
 
     def _remove_keypoint_annotations(self, rebuild=True):
         to_remove = []
