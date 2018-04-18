@@ -493,10 +493,10 @@ class CocoDataset(ub.NiceRepr):
             >>> print(ub.repr2(hist))
             {
                 'astroturf': 0,
-                'astronomer': 1,
-                'rocket': 1,
                 'astronaut': 1,
+                'astronomer': 1,
                 'helmet': 1,
+                'rocket': 1,
                 'mouth': 2,
                 'star': 5,
             }
@@ -504,7 +504,7 @@ class CocoDataset(ub.NiceRepr):
         catname_to_nannots = ub.map_keys(lambda x: self.cats[x]['name'],
                                          ub.map_vals(len, self.cid_to_aids))
         catname_to_nannots = ub.odict(sorted(catname_to_nannots.items(),
-                                             key=lambda kv: kv[1]))
+                                             key=lambda kv: (kv[1], kv[0])))
         return catname_to_nannots
 
     def category_annotation_type_frequency(self):
@@ -741,26 +741,59 @@ class CocoDataset(ub.NiceRepr):
                     to_remove.append(ann)
                 if ann['category_id'] not in self.cats:
                     to_remove.append(ann)
-
         return to_remove
 
     def remove_annotation(self, aid_or_ann):
-        remove_ann = self._resolve_to_ann(aid_or_ann)
-        self.dataset['annotations'].remove(remove_ann)
-        self._clear_index()
-
-    def remove_annotations(self, aids_or_anns):
         """
+        Remove a single annotation from the dataset
+
+        If you have multiple annotations to remove its more efficient to remove
+        them in batch with `self.remove_annotations`
+
         Example:
             >>> self = CocoDataset(demo_coco_data(), tag='demo')
             >>> aids_or_anns = [self.anns[2], 3, 4, self.anns[1]]
             >>> self.remove_annotations(aids_or_anns)
             >>> assert len(self.dataset['annotations']) == 7
         """
-        remove_anns = list(map(self._resolve_to_ann, aids_or_anns))
-        for ann in remove_anns:
-            self.dataset['annotations'].remove(ann)
+        # Do the simple thing, its O(n) anyway,
+        remove_ann = self._resolve_to_ann(aid_or_ann)
+        self.dataset['annotations'].remove(remove_ann)
         self._clear_index()
+
+    def remove_annotations(self, aids_or_anns):
+        """
+        Remove multiple annotations from the dataset.
+
+        Example:
+            >>> self = CocoDataset(demo_coco_data(), tag='demo')
+            >>> aids_or_anns = [self.anns[2], 3, 4, self.anns[1]]
+            >>> self.remove_annotations(aids_or_anns)
+            >>> assert len(self.dataset['annotations']) == 7
+        """
+        # Do nothing if given no input
+        if aids_or_anns:
+            # build mapping from aid to index O(n)
+            aid_to_index = {
+                ann['id']: index
+                for index, ann in enumerate(self.dataset['annotations'])
+            }
+            remove_aids = list(map(self._resolve_to_aid, aids_or_anns))
+            # Lookup the indices to remove, sort in descending order
+            toremove = sorted(ub.take(aid_to_index, remove_aids))[::-1]
+            for idx in toremove:
+                del self.dataset['annotations'][idx]
+            self._clear_index()
+
+    def _resolve_to_aid(self, aid_or_ann):
+        """
+        Ensures output is an annotation dictionary
+        """
+        if isinstance(aid_or_ann, int):
+            resolved_aid = aid_or_ann
+        else:
+            resolved_aid = aid_or_ann['id']
+        return resolved_aid
 
     def _resolve_to_ann(self, aid_or_ann):
         """
@@ -782,13 +815,23 @@ class CocoDataset(ub.NiceRepr):
         return resolved_ann
 
     def _remove_keypoint_annotations(self, rebuild=True):
+        """
+        Remove annotations with keypoints only
+
+        Example:
+            >>> self = CocoDataset(demo_coco_data())
+            >>> self._remove_keypoint_annotations()
+        """
         to_remove = []
         for ann in self.dataset['annotations']:
-            if ann['roi_shape'] == 'keypoints':
+            roi_shape = ann.get('roi_shape', None)
+            if roi_shape is None:
+                if 'keypoints' in ann and ann.get('bbox', None) is None:
+                    to_remove.append(ann)
+            elif roi_shape == 'keypoints':
                 to_remove.append(ann)
         print('Removing {} keypoint annotations'.format(len(to_remove)))
-        for ann in to_remove:
-            self.dataset['annotations'].remove(ann)
+        self.remove_annotations(to_remove)
         if rebuild:
             self._build_index()
 
@@ -798,8 +841,7 @@ class CocoDataset(ub.NiceRepr):
             if ann['image_id'] is None or ann['category_id'] is None:
                 to_remove.append(ann)
         print('Removing {} bad annotations'.format(len(to_remove)))
-        for ann in to_remove:
-            self.dataset['annotations'].remove(ann)
+        self.remove_annotations(to_remove)
         if rebuild:
             self._build_index()
 
@@ -809,8 +851,7 @@ class CocoDataset(ub.NiceRepr):
             if 'radius' in ann:
                 to_remove.append(ann)
         print('Removing {} radius annotations'.format(len(to_remove)))
-        for ann in to_remove:
-            self.dataset['annotations'].remove(ann)
+        self.remove_annotations(to_remove)
         if rebuild:
             self._build_index()
 
