@@ -118,6 +118,7 @@ def setup_data():
     fine = merged.copy()
     FineGrainedChallenge = viame_wrangler.mappings.FineGrainedChallenge
     fine.rename_categories(FineGrainedChallenge.raw_to_cat)
+    ensure_heirarchy(fine, FineGrainedChallenge.heirarchy)
     verbose_dump(fine, join(cfg.challenge_work_dir, prefix + '-fine-bbox-keypoint.mscoco.json'))
 
     # remove keypoint annotations
