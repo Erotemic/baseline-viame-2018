@@ -1033,7 +1033,7 @@ def setup_harness(bsize=16, workers=0):
     datasets['vali'].check_images_exist()
     loaders = {
         key: dset.make_loader(batch_size=batch_size, num_workers=workers,
-                              shuffle=(key == 'train'), pin_memory=True)
+                              shuffle=(key == 'train'), pin_memory=False)
         for key, dset in datasets.items()
     }
 
