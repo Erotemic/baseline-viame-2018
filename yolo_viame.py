@@ -122,9 +122,6 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         # We now have a weight for each item in out dataset
         index_to_weight = np.array(list(ub.take(proxy_root_mfw.to_dict(), index_to_proxyid)))
 
-        # index_to_prob = index_to_weight / index_to_weight.sum()
-        return index_to_weight
-
         if False:
             # Figure out how the likelihoods of each class change
             xy = {}
@@ -161,12 +158,8 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
                 xy['freq'][catname] = proxy_freq[cid]
             print(pd.DataFrame(xy))
 
-        # from netharn import util
-        # import matplotlib.pyplot as plt
-        # plt.plot(sorted(index_to_mfwmax))
-        # plt.plot(sorted(index_to_weight))
-
-        # self.dset.category_annotation_frequency()
+        # index_to_prob = index_to_weight / index_to_weight.sum()
+        return index_to_weight
 
     def check_images_exist(self):
         """
@@ -191,6 +184,7 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         return '{} {}'.format(self.input_id, len(self))
 
     def __len__(self):
+        return 1600
         return self.num_images
 
     def __getitem__(self, index):
@@ -515,8 +509,10 @@ class YoloCocoDataset(TorchCocoDataset):
             if True:
                 # If the data is not balanced we need to balance it
                 index_to_weight = self._training_sample_weights()
+                num_samples = len(self)
+                index_to_weight = index_to_weight[:num_samples]
                 sampler = torch_sampler.WeightedRandomSampler(index_to_weight,
-                                                              num_samples=len(index_to_weight),
+                                                              num_samples,
                                                               replacement=True)
                 sampler.data_source = self  # hack for use with multiscale
             else:
@@ -901,7 +897,8 @@ def load_coco_datasets():
     # Remove keypoints annotation data (hack)
     fpaths = [p for p in fpaths if not ('nwfsc' in p or 'afsc' in p)]
 
-    cacher = ub.Cacher('coco_dsets', cfgstr=ub.hash_data(fpaths), appname='viame')
+    cacher = ub.Cacher('coco_dsets', cfgstr=ub.hash_data(fpaths),
+                       appname='viame')
     coco_dsets = cacher.tryload()
     if coco_dsets is None:
         print('Reading raw mscoco files')
