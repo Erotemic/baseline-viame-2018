@@ -517,6 +517,7 @@ class YoloCocoDataset(TorchCocoDataset):
                 sampler = torch_sampler.WeightedRandomSampler(index_to_weight,
                                                               num_samples=len(index_to_weight),
                                                               replacement=True)
+                sampler.data_source = self
             else:
                 sampler = torch_sampler.RandomSampler(self)
             resample_freq = 10
