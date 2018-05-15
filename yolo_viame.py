@@ -508,7 +508,11 @@ class YoloCocoDataset(TorchCocoDataset):
             if True:
                 # If the data is not balanced we need to balance it
                 index_to_weight = self._training_sample_weights()
-                num_samples = len(self)
+                limit = ub.argval('--limit', default=None)
+                if limit:
+                    num_samples = int(limit)
+                else:
+                    num_samples = len(self)
                 index_to_weight = index_to_weight[:num_samples]
                 sampler = torch_sampler.WeightedRandomSampler(index_to_weight,
                                                               num_samples,
