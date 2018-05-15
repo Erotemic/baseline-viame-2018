@@ -777,11 +777,16 @@ def load_coco_datasets():
     annot_globstr = ub.truepath('~/data/viame-challenge-2018/phase0-annotations/mbari_seq0.mscoco.json')
     img_root = ub.truepath('~/data/viame-challenge-2018/phase0-imagery')
 
-    # annot_globstr = ub.truepath('~/data/viame-challenge-2018/phase0-annotations/mouss_seq0.mscoco.json')
-    # img_root = ub.truepath('~/data/viame-challenge-2018/phase0-imagery')
+    REAL_RUN = True
+    if REAL_RUN:
+        # Contest training data on hermes
+        annot_globstr = ub.truepath('~/data/noaa/training_data/annotations/*/*-coarse-bbox-only*.json')
+        img_root = ub.truepath('~/data/noaa/training_data/imagery/')
 
     fpaths = list(glob.glob(annot_globstr))
     print('fpaths = {!r}'.format(fpaths))
+
+    # do_check = not ub.argflag('--nocheck')
 
     print('Reading raw mscoco files')
     import os
@@ -794,6 +799,7 @@ def load_coco_datasets():
         try:
             assert not dset.missing_images()
         except AssertionError:
+            print('fixing image file names')
             hack = os.path.basename(fpath).split('-')[0].split('.')[0]
             dset = coco_api.CocoDataset(fpath, tag=hack, img_root=join(img_root, hack))
             assert not dset.missing_images(), ub.repr2(dset.missing_images()) + 'MISSING'
@@ -812,8 +818,9 @@ def load_coco_datasets():
 
     # HACK: wont need to do this for the released challenge data
     # probably wont hurt though
-    merged._remove_keypoint_annotations()
-    merged._run_fixes()
+    if not REAL_RUN:
+        merged._remove_keypoint_annotations()
+        merged._run_fixes()
 
     train_dset, vali_dset = wrangle.make_train_vali(merged)
     # train_dset._build_index()

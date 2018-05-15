@@ -22,9 +22,329 @@ def annot_type(ann):
     return tuple(sorted(set(ann) & {'bbox', 'line', 'keypoints'}))
 
 
-class CocoDataset(ub.NiceRepr):
-    """
+class CocoExtrasMixin(object):
+    def category_annotation_frequency(self):
+        """
+        Reports the number of annotations of each category
 
+        Example:
+            >>> dataset = demo_coco_data()
+            >>> self = CocoDataset(dataset, tag='demo')
+            >>> hist = self.category_annotation_frequency()
+            >>> print(ub.repr2(hist))
+            {
+                'astroturf': 0,
+                'astronaut': 1,
+                'astronomer': 1,
+                'helmet': 1,
+                'rocket': 1,
+                'mouth': 2,
+                'star': 5,
+            }
+        """
+        catname_to_nannots = ub.map_keys(lambda x: self.cats[x]['name'],
+                                         ub.map_vals(len, self.cid_to_aids))
+        catname_to_nannots = ub.odict(sorted(catname_to_nannots.items(),
+                                             key=lambda kv: (kv[1], kv[0])))
+        return catname_to_nannots
+
+    def category_annotation_type_frequency(self):
+        """
+        Reports the number of annotations of each type for each category
+
+        Example:
+            >>> dataset = demo_coco_data()
+            >>> self = CocoDataset(dataset, tag='demo')
+            >>> hist = self.category_annotation_frequency()
+            >>> print(ub.repr2(hist))
+        """
+        catname_to_nannot_types = {}
+        for cid, aids in self.cid_to_aids.items():
+            name = self.cats[cid]['name']
+            hist = ub.dict_hist(map(annot_type, ub.take(self.anns, aids)))
+            catname_to_nannot_types[name] = ub.map_keys(
+                lambda k: k[0] if len(k) == 1 else k, hist)
+        return catname_to_nannot_types
+
+    def basic_stats(self):
+        """
+        Reports number of images, annotations, and categories.
+
+        Example:
+            >>> dataset = demo_coco_data()
+            >>> self = CocoDataset(dataset, tag='demo')
+            >>> print(ub.repr2(self.basic_stats()))
+            {
+                'n_anns': 11,
+                'n_imgs': 3,
+                'n_cats': 7,
+            }
+        """
+        return ub.odict([
+            ('n_anns', len(self.dataset['annotations'])),
+            ('n_imgs', len(self.dataset['images'])),
+            ('n_cats', len(self.dataset['categories'])),
+        ])
+
+    def extended_stats(self):
+        """
+        Reports number of images, annotations, and categories.
+
+        Example:
+            >>> dataset = demo_coco_data()
+            >>> self = CocoDataset(dataset, tag='demo')
+            >>> print(ub.repr2(self.extended_stats()))
+        """
+        from netharn import util
+        def mapping_stats(xid_to_yids):
+            n_yids = list(ub.map_vals(len, xid_to_yids).values())
+            return util.stats_dict(n_yids, n_extreme=True)
+        return ub.odict([
+            ('annots_per_img', mapping_stats(self.gid_to_aids)),
+            ('cats_per_img', mapping_stats(self.cid_to_gids)),
+            ('cats_per_annot', mapping_stats(self.cid_to_aids)),
+        ])
+
+    def _run_fixes(self):
+        """
+        Fixes issues in conversion scripts. Published (non-phase0) data should
+        not have these issues.
+        """
+        for ann in self.dataset['annotations']:
+
+            if 'roi_category' in ann:
+                cid = ann['roi_category']
+                if 'category_id' not in ann:
+                    ann['category_id'] = cid
+                else:
+                    ann.pop('roi_category')
+                    # assert ann['category_id'] == cid, ub.repr2(ann)
+
+            if 'roi_shape' not in ann:
+                isect = set(ann).intersection({'bbox', 'keypoints', 'line'})
+                if isect == {'bbox'}:
+                    ann['roi_shape'] = 'bbox'
+                elif isect == {'keypoints'}:
+                    ann['roi_shape'] = 'keypoints'
+                elif isect == {'line'}:
+                    ann['roi_shape'] = 'line'
+
+            if ann['roi_shape'] == 'circle':
+                # We should simply remove this annotation
+                pass
+
+                # # the circle format is simply a line that defines the radius
+                # x1, y1, x2, y2 = ann['bbox']
+                # xc = (x1 + x2) / 2
+                # yc = (y1 + y2) / 2
+                # radius = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+                # length = radius * 2
+                # bbox = [(xc - radius), (yc - radius), length, length]
+                # ann['bbox'] = bbox
+                # ann['radius'] = [x1, y1, x2, y2]
+                # ann['roi_shape'] = 'bbox'
+
+            if ann['roi_shape'] == 'point' and 'keypoints' not in ann:
+                x, y, w, h = ann.pop('bbox')
+                ann.pop('area', None)
+                assert w == 0 and h == 0
+                ann['keypoints'] = [x, y, 1]
+                ann['roi_shape'] = 'keypoints'
+
+            if ann['roi_shape'] == 'boundingBox':
+                # standard coco bbox is [x,y,width,height]
+                x1, y1, x2, y2 = ann['bbox']
+                assert x2 >= x1
+                assert y2 >= y1
+                w = x2 - x1
+                h = y2 - y1
+                ann['bbox'] = [x1, y1, w, h]
+                ann['roi_shape'] = 'bbox'
+
+            if ann['roi_shape'] == 'line' and 'line' not in ann:
+                # hack in a decent bounding box to fix the roi.
+                # Assume the line is the diameter of an enscribed circle
+                x1, y1, x2, y2 = ann['bbox']
+                xc = (x1 + x2) / 2
+                yc = (y1 + y2) / 2
+                length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+                bbox = [(xc - length / 2), (yc - length / 2), length, length]
+                ann['bbox'] = bbox
+                ann['line'] = [x1, y1, x2, y2]
+
+            if 'line' in ann and 'bbox' not in ann:
+                x1, y1, x2, y2 = ann['line']
+                xc = (x1 + x2) / 2
+                yc = (y1 + y2) / 2
+                length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+                bbox = [(xc - length / 2), (yc - length / 2), length, length]
+                ann['bbox'] = bbox
+                ann['roi_shape'] = 'line'
+
+            if 'roi_shape' in ann:
+                assert ann['roi_shape'] in ['keypoints', 'line', 'bbox'], (
+                    ub.repr2(ann))
+
+            if 'keypoints' in ann:
+                assert len(ann['keypoints']) % 3 == 0
+
+            # to make detectron happy
+            if 'bbox' in ann:
+                x, y, w, h = ann['bbox']
+                ann['area'] = w * h
+
+            ann['segmentation'] = []
+            ann['iscrowd'] = 0
+
+    def lookup_imgs(self, filename=None):
+        """
+        Linear search for an images with specific attributes
+
+        Ignore:
+            filename = '201503.20150525.101841191.573975.png'
+            list(self.lookup_imgs(filename))
+            gid = 64940
+            img = self.imgs[gid]
+            img['file_name'] = filename
+        """
+        for img in self.imgs.values():
+            if filename is not None:
+                fpath = img['file_name']
+                fname = basename(fpath)
+                fname_noext = splitext(fname)[0]
+                if filename in [fpath, fname, fname_noext]:
+                    print('img = {!r}'.format(img))
+                    yield img
+
+    def lookup_anns(self, has=None):
+        """
+        Linear search for an annotations with specific attributes
+
+        Ignore:
+            list(self.lookup_anns(has='radius'))
+            gid = 112888
+            img = self.imgs[gid]
+            img['file_name'] = filename
+        """
+        for ann in self.anns.values():
+            if has is not None:
+                if hasattr(ann, has):
+                    print('ann = {!r}'.format(ann))
+                    yield ann
+
+    def _mark_annotated_images(self):
+        """
+        Mark any image that explicitly has annotations.
+        """
+        for gid, img in self.imgs.items():
+            aids = self.gid_to_aids.get(gid, [])
+            # If there is at least one annotation, always mark as has_annots
+            if len(aids) > 0:
+                assert img.get('has_annots', ub.NoParam) in [ub.NoParam, True], (
+                    'image with annots was explictly labeled as non-True!')
+                img['has_annots'] = True
+            else:
+                # Otherwise set has_annots to null if it has not been
+                # explicitly labeled
+                if 'has_annots' not in img:
+                    img['has_annots'] = None
+
+    def _find_bad_annotations(self):
+        to_remove = []
+        for ann in self.dataset['annotations']:
+            if ann['image_id'] is None or ann['category_id'] is None:
+                to_remove.append(ann)
+            else:
+                if ann['image_id'] not in self.imgs:
+                    to_remove.append(ann)
+                if ann['category_id'] not in self.cats:
+                    to_remove.append(ann)
+        return to_remove
+
+    def _resolve_to_aid(self, aid_or_ann):
+        """
+        Ensures output is an annotation dictionary
+        """
+        if isinstance(aid_or_ann, int):
+            resolved_aid = aid_or_ann
+        else:
+            resolved_aid = aid_or_ann['id']
+        return resolved_aid
+
+    def _resolve_to_ann(self, aid_or_ann):
+        """
+        Ensures output is an annotation dictionary
+        """
+        if isinstance(aid_or_ann, int):
+            resolved_ann = None
+            if self.anns is not None:
+                resolved_ann = self.anns[aid_or_ann]
+            else:
+                for ann in self.dataset['annotations']:
+                    if ann['id'] == aid_or_ann:
+                        resolved_ann = ann
+                        break
+                if not resolved_ann:
+                    raise IndexError('aid {} not in dataset'.format(aid_or_ann))
+        else:
+            resolved_ann = aid_or_ann
+        return resolved_ann
+
+    def _remove_keypoint_annotations(self, rebuild=True):
+        """
+        Remove annotations with keypoints only
+
+        Example:
+            >>> self = CocoDataset(demo_coco_data())
+            >>> self._remove_keypoint_annotations()
+        """
+        to_remove = []
+        for ann in self.dataset['annotations']:
+            roi_shape = ann.get('roi_shape', None)
+            if roi_shape is None:
+                if 'keypoints' in ann and ann.get('bbox', None) is None:
+                    to_remove.append(ann)
+            elif roi_shape == 'keypoints':
+                to_remove.append(ann)
+        print('Removing {} keypoint annotations'.format(len(to_remove)))
+        self.remove_annotations(to_remove)
+        if rebuild:
+            self._build_index()
+
+    def _remove_bad_annotations(self, rebuild=True):
+        to_remove = []
+        for ann in self.dataset['annotations']:
+            if ann['image_id'] is None or ann['category_id'] is None:
+                to_remove.append(ann)
+        print('Removing {} bad annotations'.format(len(to_remove)))
+        self.remove_annotations(to_remove)
+        if rebuild:
+            self._build_index()
+
+    def _remove_radius_annotations(self, rebuild=False):
+        to_remove = []
+        for ann in self.dataset['annotations']:
+            if 'radius' in ann:
+                to_remove.append(ann)
+        print('Removing {} radius annotations'.format(len(to_remove)))
+        self.remove_annotations(to_remove)
+        if rebuild:
+            self._build_index()
+
+    def _remove_empty_images(self):
+        to_remove = []
+        for gid in self.imgs.keys():
+            aids = self.gid_to_aids.get(gid, [])
+            if not aids:
+                to_remove.append(self.imgs[gid])
+        print('Removing {} empty images'.format(len(to_remove)))
+        for img in to_remove:
+            self.dataset['images'].remove(img)
+        self._build_index()
+
+
+class CocoDataset(ub.NiceRepr, CocoExtrasMixin):
+    """
     Notes:
         A keypoint annotation
             {
@@ -492,93 +812,6 @@ class CocoDataset(ub.NiceRepr):
             xs, ys = np.vstack(keypoints).T
             ax.plot(xs, ys, 'bo')
 
-    def category_annotation_frequency(self):
-        """
-        Reports the number of annotations of each category
-
-        Example:
-            >>> dataset = demo_coco_data()
-            >>> self = CocoDataset(dataset, tag='demo')
-            >>> hist = self.category_annotation_frequency()
-            >>> print(ub.repr2(hist))
-            {
-                'astroturf': 0,
-                'astronaut': 1,
-                'astronomer': 1,
-                'helmet': 1,
-                'rocket': 1,
-                'mouth': 2,
-                'star': 5,
-            }
-        """
-        catname_to_nannots = ub.map_keys(lambda x: self.cats[x]['name'],
-                                         ub.map_vals(len, self.cid_to_aids))
-        catname_to_nannots = ub.odict(sorted(catname_to_nannots.items(),
-                                             key=lambda kv: (kv[1], kv[0])))
-        return catname_to_nannots
-
-    def category_annotation_type_frequency(self):
-        """
-        Reports the number of annotations of each type for each category
-
-        Example:
-            >>> dataset = demo_coco_data()
-            >>> self = CocoDataset(dataset, tag='demo')
-            >>> hist = self.category_annotation_frequency()
-            >>> print(ub.repr2(hist))
-        """
-        catname_to_nannot_types = {}
-        for cid, aids in self.cid_to_aids.items():
-            name = self.cats[cid]['name']
-            hist = ub.dict_hist(map(annot_type, ub.take(self.anns, aids)))
-            catname_to_nannot_types[name] = ub.map_keys(
-                lambda k: k[0] if len(k) == 1 else k, hist)
-        return catname_to_nannot_types
-
-    def basic_stats(self):
-        """
-        Reports number of images, annotations, and categories.
-
-        Example:
-            >>> dataset = demo_coco_data()
-            >>> self = CocoDataset(dataset, tag='demo')
-            >>> print(ub.repr2(self.basic_stats()))
-            {
-                'n_anns': 11,
-                'n_imgs': 3,
-                'n_cats': 7,
-            }
-        """
-        return ub.odict([
-            ('n_anns', len(self.dataset['annotations'])),
-            ('n_imgs', len(self.dataset['images'])),
-            ('n_cats', len(self.dataset['categories'])),
-        ])
-
-    def extended_stats(self):
-        """
-        Reports number of images, annotations, and categories.
-
-        Example:
-            >>> dataset = demo_coco_data()
-            >>> self = CocoDataset(dataset, tag='demo')
-            >>> print(ub.repr2(self.basic_stats()))
-            {
-                'n_anns': 11,
-                'n_imgs': 3,
-                'n_cats': 7,
-            }
-        """
-        import netharn as nh
-        def mapping_stats(xid_to_yids):
-            return nh.util.stats_dict(
-                list(ub.map_vals(len, xid_to_yids).values()))
-        return ub.odict([
-            ('annots_per_img', mapping_stats(self.gid_to_aids)),
-            ('cats_per_img', mapping_stats(self.cid_to_gids)),
-            ('cats_per_annot', mapping_stats(self.cid_to_aids)),
-        ])
-
     def rename_categories(self, mapper):
         """
         Create a coarser categorization
@@ -618,164 +851,6 @@ class CocoDataset(ub.NiceRepr):
             # ann['fine_category_id'] = old_id
 
         self._build_index()
-
-    # --- The following functions were only defined for debug purposes ---
-
-    def _run_fixes(self):
-        """
-        Fixes issues in conversion scripts. Published (non-phase0) data should
-        not have these issues.
-        """
-        for ann in self.dataset['annotations']:
-
-            if 'roi_category' in ann:
-                cid = ann['roi_category']
-                if 'category_id' not in ann:
-                    ann['category_id'] = cid
-                else:
-                    ann.pop('roi_category')
-                    # assert ann['category_id'] == cid, ub.repr2(ann)
-
-            if 'roi_shape' not in ann:
-                isect = set(ann).intersection({'bbox', 'keypoints', 'line'})
-                if isect == {'bbox'}:
-                    ann['roi_shape'] = 'bbox'
-                elif isect == {'keypoints'}:
-                    ann['roi_shape'] = 'keypoints'
-                elif isect == {'line'}:
-                    ann['roi_shape'] = 'line'
-
-            if ann['roi_shape'] == 'circle':
-                # We should simply remove this annotation
-                pass
-
-                # # the circle format is simply a line that defines the radius
-                # x1, y1, x2, y2 = ann['bbox']
-                # xc = (x1 + x2) / 2
-                # yc = (y1 + y2) / 2
-                # radius = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-                # length = radius * 2
-                # bbox = [(xc - radius), (yc - radius), length, length]
-                # ann['bbox'] = bbox
-                # ann['radius'] = [x1, y1, x2, y2]
-                # ann['roi_shape'] = 'bbox'
-
-            if ann['roi_shape'] == 'point' and 'keypoints' not in ann:
-                x, y, w, h = ann.pop('bbox')
-                ann.pop('area', None)
-                assert w == 0 and h == 0
-                ann['keypoints'] = [x, y, 1]
-                ann['roi_shape'] = 'keypoints'
-
-            if ann['roi_shape'] == 'boundingBox':
-                # standard coco bbox is [x,y,width,height]
-                x1, y1, x2, y2 = ann['bbox']
-                assert x2 >= x1
-                assert y2 >= y1
-                w = x2 - x1
-                h = y2 - y1
-                ann['bbox'] = [x1, y1, w, h]
-                ann['roi_shape'] = 'bbox'
-
-            if ann['roi_shape'] == 'line' and 'line' not in ann:
-                # hack in a decent bounding box to fix the roi.
-                # Assume the line is the diameter of an enscribed circle
-                x1, y1, x2, y2 = ann['bbox']
-                xc = (x1 + x2) / 2
-                yc = (y1 + y2) / 2
-                length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-                bbox = [(xc - length / 2), (yc - length / 2), length, length]
-                ann['bbox'] = bbox
-                ann['line'] = [x1, y1, x2, y2]
-
-            if 'line' in ann and 'bbox' not in ann:
-                x1, y1, x2, y2 = ann['line']
-                xc = (x1 + x2) / 2
-                yc = (y1 + y2) / 2
-                length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-                bbox = [(xc - length / 2), (yc - length / 2), length, length]
-                ann['bbox'] = bbox
-                ann['roi_shape'] = 'line'
-
-            if 'roi_shape' in ann:
-                assert ann['roi_shape'] in ['keypoints', 'line', 'bbox'], (
-                    ub.repr2(ann))
-
-            if 'keypoints' in ann:
-                assert len(ann['keypoints']) % 3 == 0
-
-            # to make detectron happy
-            if 'bbox' in ann:
-                x, y, w, h = ann['bbox']
-                ann['area'] = w * h
-
-            ann['segmentation'] = []
-            ann['iscrowd'] = 0
-
-    def lookup_imgs(self, filename=None):
-        """
-        Linear search for an images with specific attributes
-
-        Ignore:
-            filename = '201503.20150525.101841191.573975.png'
-            list(self.lookup_imgs(filename))
-            gid = 64940
-            img = self.imgs[gid]
-            img['file_name'] = filename
-        """
-        for img in self.imgs.values():
-            if filename is not None:
-                fpath = img['file_name']
-                fname = basename(fpath)
-                fname_noext = splitext(fname)[0]
-                if filename in [fpath, fname, fname_noext]:
-                    print('img = {!r}'.format(img))
-                    yield img
-
-    def lookup_anns(self, has=None):
-        """
-        Linear search for an annotations with specific attributes
-
-        Ignore:
-            list(self.lookup_anns(has='radius'))
-            gid = 112888
-            img = self.imgs[gid]
-            img['file_name'] = filename
-        """
-        for ann in self.anns.values():
-            if has is not None:
-                if hasattr(ann, has):
-                    print('ann = {!r}'.format(ann))
-                    yield ann
-
-    def _mark_annotated_images(self):
-        """
-        Mark any image that explicitly has annotations.
-        """
-        for gid, img in self.imgs.items():
-            aids = self.gid_to_aids.get(gid, [])
-            # If there is at least one annotation, always mark as has_annots
-            if len(aids) > 0:
-                assert img.get('has_annots', ub.NoParam) in [ub.NoParam, True], (
-                    'image with annots was explictly labeled as non-True!')
-                img['has_annots'] = True
-            else:
-                # Otherwise set has_annots to null if it has not been
-                # explicitly labeled
-                if 'has_annots' not in img:
-                    img['has_annots'] = None
-
-    def _find_bad_annotations(self):
-        to_remove = []
-        for ann in self.dataset['annotations']:
-            if ann['image_id'] is None or ann['category_id'] is None:
-                to_remove.append(ann)
-            else:
-                if ann['image_id'] not in self.imgs:
-                    to_remove.append(ann)
-                if ann['category_id'] not in self.cats:
-                    to_remove.append(ann)
-        return to_remove
 
     def remove_annotation(self, aid_or_ann):
         """
@@ -819,87 +894,6 @@ class CocoDataset(ub.NiceRepr):
                 del self.dataset['annotations'][idx]
             self._clear_index()
 
-    def _resolve_to_aid(self, aid_or_ann):
-        """
-        Ensures output is an annotation dictionary
-        """
-        if isinstance(aid_or_ann, int):
-            resolved_aid = aid_or_ann
-        else:
-            resolved_aid = aid_or_ann['id']
-        return resolved_aid
-
-    def _resolve_to_ann(self, aid_or_ann):
-        """
-        Ensures output is an annotation dictionary
-        """
-        if isinstance(aid_or_ann, int):
-            resolved_ann = None
-            if self.anns is not None:
-                resolved_ann = self.anns[aid_or_ann]
-            else:
-                for ann in self.dataset['annotations']:
-                    if ann['id'] == aid_or_ann:
-                        resolved_ann = ann
-                        break
-                if not resolved_ann:
-                    raise IndexError('aid {} not in dataset'.format(aid_or_ann))
-        else:
-            resolved_ann = aid_or_ann
-        return resolved_ann
-
-    def _remove_keypoint_annotations(self, rebuild=True):
-        """
-        Remove annotations with keypoints only
-
-        Example:
-            >>> self = CocoDataset(demo_coco_data())
-            >>> self._remove_keypoint_annotations()
-        """
-        to_remove = []
-        for ann in self.dataset['annotations']:
-            roi_shape = ann.get('roi_shape', None)
-            if roi_shape is None:
-                if 'keypoints' in ann and ann.get('bbox', None) is None:
-                    to_remove.append(ann)
-            elif roi_shape == 'keypoints':
-                to_remove.append(ann)
-        print('Removing {} keypoint annotations'.format(len(to_remove)))
-        self.remove_annotations(to_remove)
-        if rebuild:
-            self._build_index()
-
-    def _remove_bad_annotations(self, rebuild=True):
-        to_remove = []
-        for ann in self.dataset['annotations']:
-            if ann['image_id'] is None or ann['category_id'] is None:
-                to_remove.append(ann)
-        print('Removing {} bad annotations'.format(len(to_remove)))
-        self.remove_annotations(to_remove)
-        if rebuild:
-            self._build_index()
-
-    def _remove_radius_annotations(self, rebuild=False):
-        to_remove = []
-        for ann in self.dataset['annotations']:
-            if 'radius' in ann:
-                to_remove.append(ann)
-        print('Removing {} radius annotations'.format(len(to_remove)))
-        self.remove_annotations(to_remove)
-        if rebuild:
-            self._build_index()
-
-    def _remove_empty_images(self):
-        to_remove = []
-        for gid in self.imgs.keys():
-            aids = self.gid_to_aids.get(gid, [])
-            if not aids:
-                to_remove.append(self.imgs[gid])
-        print('Removing {} empty images'.format(len(to_remove)))
-        for img in to_remove:
-            self.dataset['images'].remove(img)
-        self._build_index()
-
     def add_category(self, name, supercategory=None):
         if name in self.name_to_cat:
             raise ValueError(name)
@@ -925,6 +919,8 @@ class CocoDataset(ub.NiceRepr):
             self.cid_to_gids[cid] = []
             self.cid_to_aids[cid] = []
             self.name_to_cat[name] = cat
+
+    # --- The following functions were only defined for debug purposes ---
 
     def missing_images(dset):
         import os
@@ -996,7 +992,7 @@ def demo_coco_data():
 if __name__ == '__main__':
     r"""
     CommandLine:
-        python -m coco_wrangler.coco_api
+        python -m coco_wrangler.coco_api all
     """
     import xdoctest
     xdoctest.doctest_module(__file__)
