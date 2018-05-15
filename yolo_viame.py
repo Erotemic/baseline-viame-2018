@@ -65,6 +65,109 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
                 print('node = {!r}'.format(key))
                 print('    * neighbs = {!r}'.format(list(val)))
 
+    def _training_sample_weights(self):
+        """
+        Assigns weighting to each image to includence sample probability.
+
+        We want to see very frequent categories less often,
+        but we also don't really care about the rarest classes to the point
+        where we should smaple them more than uncommon classes.  We also don't
+        want to sample images without any or with too many annotations very
+        often.
+        """
+        index_to_gid = [img['id'] for img in self.dset.dataset['images']]
+        index_to_aids = list(ub.take(self.dset.gid_to_aids, index_to_gid))
+        index_to_cids = [[self.dset.anns[aid]['category_id'] for aid in aids]
+                         for aids in index_to_aids]
+
+        catname_to_cid = {
+            cat['name']: cid
+            for cid, cat in self.dset.cats.items()}
+
+        # median frequency weighting with minimum threshold
+        min_examples = 20
+        cat_freq = pd.Series(self.dset.category_annotation_frequency())
+
+        valid_freq = cat_freq[cat_freq > min_examples]
+        normal_mfw = valid_freq.median() / valid_freq
+
+        # Draw anything under the threshold with probability equal to the median
+        too_few = cat_freq[(cat_freq <= min_examples) & (cat_freq > 0)]
+        too_few[:] = 1.0
+        category_mfw = pd.concat([normal_mfw, too_few])
+
+        cid_to_mfw = category_mfw.rename(catname_to_cid)
+
+        cid_to_mfw_dict = cid_to_mfw.to_dict()
+
+        index_to_weights = [list(ub.take(cid_to_mfw_dict, cids)) for cids in index_to_cids]
+        index_to_nannots = np.array(list(map(len, index_to_weights)))
+
+        # Each image becomes represented by the category with maximum median
+        # frequency weight. This allows us to assign each image a proxy class
+        # We make another proxy class to represent images without anything in
+        # them.
+        EMPTY_PROXY_CID = -1
+        index_to_proxyid = [
+            # cid_to_mfw.loc[cids].idxmax()
+            ub.argmax(ub.dict_subset(cid_to_mfw_dict, cids))
+            if len(cids) else EMPTY_PROXY_CID
+            for cids in index_to_cids
+        ]
+
+        proxy_freq = pd.Series(ub.dict_hist(index_to_proxyid))
+        proxy_root_mfw = proxy_freq.median() / proxy_freq
+        power = 0.878
+        proxy_root_mfw = proxy_root_mfw ** power
+        # We now have a weight for each item in out dataset
+        index_to_weight = np.array(list(ub.take(proxy_root_mfw.to_dict(), index_to_proxyid)))
+
+        # index_to_prob = index_to_weight / index_to_weight.sum()
+        return index_to_weight
+
+        if False:
+            # Figure out how the likelihoods of each class change
+            xy = {}
+            for power in [0, .5, .878, 1]:
+                proxy_root_mfw = proxy_freq.median() / proxy_freq
+                # dont let weights get too high
+                # proxy_root_mfw = np.sqrt(proxy_root_mfw)
+                # power = .88
+                proxy_root_mfw = proxy_root_mfw ** power
+                # proxy_root_mfw = np.clip(proxy_root_mfw, a_min=None, a_max=3)
+
+                index_to_weight = list(ub.take(proxy_root_mfw.to_dict(), index_to_proxyid))
+
+                if 1:
+                    # what is the probability we draw an empty image?
+                    df = pd.DataFrame({
+                        'nannots': index_to_nannots,
+                        'weight': index_to_weight,
+                    })
+                    df['prob'] = df.weight / df.weight.sum()
+
+                    prob_empty = df.prob[df.nannots == 0].sum()
+
+                    probs = {'empty': prob_empty}
+                    for cid in cid_to_mfw.index:
+                        flags = [cid in cids for cids in index_to_cids]
+                        catname = self.dset.cats[cid]['name']
+                        p = df[flags].prob.sum()
+                        probs[catname] = p
+                    xy['p{}'.format(power)] = pd.Series(probs)
+            xy['freq'] = {}
+            for cid in cid_to_mfw.index:
+                catname = self.dset.cats[cid]['name']
+                xy['freq'][catname] = proxy_freq[cid]
+            print(pd.DataFrame(xy))
+
+        # from netharn import util
+        # import matplotlib.pyplot as plt
+        # plt.plot(sorted(index_to_mfwmax))
+        # plt.plot(sorted(index_to_weight))
+
+        # self.dset.category_annotation_frequency()
+
     def check_images_exist(self):
         """
         Example:
@@ -161,6 +264,8 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         if 'habcam' in gpath:
             # HACK: habcam images are stereo and we only have annots for the
             # left side. Crop off the left side
+            # TODO: the left and right sides should be aligned, so
+            # we could actually make use of this data
             if imbgr.shape[1] > 2000:
                 imbgr = imbgr[:, 0:imbgr.shape[1] // 2, :]
             else:
@@ -263,7 +368,7 @@ class YoloCocoDataset(TorchCocoDataset):
         Ignore:
             >>> harn = setup_harness()
             >>> self = harn.hyper.make_loaders()['train'].dataset
-            >>> index = 10
+            >>> index = 11
             >>> chw01, label = self[index]
             >>> hwc01 = chw01.numpy().transpose(1, 2, 0)
             >>> print(hwc01.shape)
@@ -406,7 +511,14 @@ class YoloCocoDataset(TorchCocoDataset):
         import torch.utils.data.sampler as torch_sampler
         assert len(self) > 0, 'must have some data'
         if shuffle:
-            sampler = torch_sampler.RandomSampler(self)
+            if True:
+                # If the data is not balanced we need to balance it
+                index_to_weight = self._training_sample_weights()
+                sampler = torch_sampler.WeightedRandomSampler(index_to_weight,
+                                                              num_samples=len(index_to_weight),
+                                                              replacement=True)
+            else:
+                sampler = torch_sampler.RandomSampler(self)
             resample_freq = 10
         else:
             sampler = torch_sampler.SequentialSampler(self)
