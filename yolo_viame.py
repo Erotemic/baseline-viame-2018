@@ -184,7 +184,7 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         return '{} {}'.format(self.input_id, len(self))
 
     def __len__(self):
-        return 800
+        # return 800
         return self.num_images
 
     def __getitem__(self, index):
