@@ -287,8 +287,8 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
             # if 'bbox' not in ann:
             #     continue
             xywh = nh.util.Boxes(np.array(ann['bbox']), 'xywh')
-            # if xywh.area[0] == 0:
-            #     continue
+            if xywh.area[0] == 0:
+                continue
             tlbr = xywh.toformat('tlbr')
             cid = ann['category_id']
             cname = self.dset.cats[cid]['name']
@@ -599,10 +599,10 @@ class YoloHarn(nh.FitHarn):
         Example:
             >>> harn = setup_harness(bsize=1)
             >>> harn.initialize()
-            >>> batch = harn._demo_batch(0, 'test')
-            >>> weights_fpath = light_yolo.demo_weights()
-            >>> state_dict = harn.xpu.load(weights_fpath)['weights']
-            >>> harn.model.module.load_state_dict(state_dict)
+            >>> batch = harn._demo_batch(0, 'train')
+            >>> #weights_fpath = light_yolo.demo_weights()
+            >>> #state_dict = harn.xpu.load(weights_fpath)['weights']
+            >>> #harn.model.module.load_state_dict(state_dict)
             >>> outputs, loss = harn.run_batch(batch)
             >>> harn.on_batch(batch, outputs, loss)
             >>> # xdoc: +REQUIRES(--show)
@@ -610,7 +610,7 @@ class YoloHarn(nh.FitHarn):
             >>> from netharn.util import mplutil
             >>> mplutil.qtensure()  # xdoc: +SKIP
             >>> harn.visualize_prediction(batch, outputs, postout, idx=0,
-            >>>                           thresh=0.01)
+            >>>                           thresh=0.2)
             >>> mplutil.show_if_requested()
         """
         if harn.current_tag != 'train':
@@ -1080,6 +1080,12 @@ def train():
     python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase1_b16 --phase=1 --batch_size=16 --workers=2 --gpu=0
 
     python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase1_b32 --phase=1 --batch_size=32 --workers=4 --gpu=2,3
+
+
+    srun -c 4 -p community --gres=gpu:1 \
+            python ~/code/baseline-viame-2018/yolo_viame.py train \
+            --nice baseline1 --batch_size=16 --workers=4 --gpu=0
+
     """
     harn = setup_harness()
     harn.run()
