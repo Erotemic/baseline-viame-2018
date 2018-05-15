@@ -897,59 +897,48 @@ def load_coco_datasets():
         annot_globstr = ub.truepath('~/data/noaa/training_data/annotations/*/*-coarse-bbox-only*.json')
         img_root = ub.truepath('~/data/noaa/training_data/imagery/')
 
-    fpaths = list(glob.glob(annot_globstr))
-    print('fpaths = {!r}'.format(fpaths))
+    fpaths = sorted(glob.glob(annot_globstr))
+    # Remove keypoints annotation data (hack)
+    fpaths = [p for p in fpaths if not ('nwfsc' in p or 'afsc' in p)]
 
-    # do_check = not ub.argflag('--nocheck')
+    cacher = ub.Cacher(cfgstr=ub.hash_data(fpaths), appname='viame')
+    coco_dsets = cacher.tryload()
+    if coco_dsets is None:
+        print('Reading raw mscoco files')
+        import os
+        dsets = []
+        for fpath in sorted(fpaths):
+            print('reading fpath = {!r}'.format(fpath))
+            dset = coco_api.CocoDataset(fpath, tag='', img_root=img_root)
+            try:
+                assert not dset.missing_images()
+            except AssertionError:
+                print('fixing image file names')
+                hack = os.path.basename(fpath).split('-')[0].split('.')[0]
+                dset = coco_api.CocoDataset(fpath, tag=hack, img_root=join(img_root, hack))
+                assert not dset.missing_images(), ub.repr2(dset.missing_images()) + 'MISSING'
+            print(ub.repr2(dset.basic_stats()))
+            dsets.append(dset)
 
-    print('Reading raw mscoco files')
-    import os
-    dsets = []
-    for fpath in sorted(fpaths):
-        if 'nwfsc' in fpath or 'afsc' in fpath:
-            continue
-        print('reading fpath = {!r}'.format(fpath))
-        dset = coco_api.CocoDataset(fpath, tag='', img_root=img_root)
-        try:
-            assert not dset.missing_images()
-        except AssertionError:
-            print('fixing image file names')
-            hack = os.path.basename(fpath).split('-')[0].split('.')[0]
-            dset = coco_api.CocoDataset(fpath, tag=hack, img_root=join(img_root, hack))
-            assert not dset.missing_images(), ub.repr2(dset.missing_images()) + 'MISSING'
-        print(ub.repr2(dset.basic_stats()))
-        dsets.append(dset)
+        print('Merging')
+        merged = coco_api.CocoDataset.union(*dsets)
+        merged.img_root = img_root
 
-    print('Merging')
-    merged = coco_api.CocoDataset.union(*dsets)
-    merged.img_root = img_root
+        # HACK: wont need to do this for the released challenge data
+        # probably wont hurt though
+        if not REAL_RUN:
+            merged._remove_keypoint_annotations()
+            merged._run_fixes()
 
-    # for gid, img in merged.imgs.items():
-    #     if '201503.20150519.123438498.205475' in img['file_name'] :
-    #         for aid in merged.gid_to_aids[gid]:
-    #             print(ub.repr2(merged.anns[aid]))
-    #         break
+        train_dset, vali_dset = wrangle.make_train_vali(merged)
 
-    # HACK: wont need to do this for the released challenge data
-    # probably wont hurt though
-    if not REAL_RUN:
-        merged._remove_keypoint_annotations()
-        merged._run_fixes()
+        coco_dsets = {
+            'train': train_dset,
+            'vali': vali_dset,
+        }
 
-    train_dset, vali_dset = wrangle.make_train_vali(merged)
-    # train_dset._build_index()
-    # vali_dset._build_index()
+        cacher.save(coco_dsets)
 
-    coco_dsets = {
-        'train': train_dset,
-        'vali': vali_dset,
-    }
-
-    # for gid, img in coco_dsets['train'].imgs.items():
-    #     if '201503.20150519.123438498.205475' in img['file_name'] :
-    #         for aid in merged.gid_to_aids[gid]:
-    #             print(ub.repr2(merged.anns[aid]))
-    #         break
     return coco_dsets
 
 
@@ -970,7 +959,7 @@ def setup_harness(bsize=16, workers=0):
     bstep = int(ub.argval('--bstep', 1))
     workers = int(ub.argval('--workers', default=workers))
     decay = float(ub.argval('--decay', default=0.0005))
-    lr = float(ub.argval('--lr', default=0.0001))
+    lr = float(ub.argval('--lr', default=0.001))
     workdir = ub.argval('--workdir', default=ub.truepath('~/work/viame/yolo'))
     ovthresh = 0.5
 
@@ -1080,7 +1069,6 @@ def train():
     python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase1_b16 --phase=1 --batch_size=16 --workers=2 --gpu=0
 
     python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase1_b32 --phase=1 --batch_size=32 --workers=4 --gpu=2,3
-
 
     srun -c 4 -p community --gres=gpu:1 \
             python ~/code/baseline-viame-2018/yolo_viame.py train \
