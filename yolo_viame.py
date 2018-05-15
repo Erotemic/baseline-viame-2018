@@ -901,7 +901,7 @@ def load_coco_datasets():
     # Remove keypoints annotation data (hack)
     fpaths = [p for p in fpaths if not ('nwfsc' in p or 'afsc' in p)]
 
-    cacher = ub.Cacher(cfgstr=ub.hash_data(fpaths), appname='viame')
+    cacher = ub.Cacher('coco_dsets', cfgstr=ub.hash_data(fpaths), appname='viame')
     coco_dsets = cacher.tryload()
     if coco_dsets is None:
         print('Reading raw mscoco files')
