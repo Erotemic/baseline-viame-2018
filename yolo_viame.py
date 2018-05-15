@@ -15,6 +15,7 @@ Ignore:
 """
 import os
 from os.path import join
+import glob
 import torch
 import cv2
 import ubelt as ub
@@ -22,6 +23,7 @@ import pandas as pd
 import numpy as np
 import imgaug.augmenters as iaa
 import torch.utils.data as torch_data
+import torch.utils.data.sampler as torch_sampler
 import netharn as nh
 from netharn.models.yolo2 import multiscale_batch_sampler
 from netharn.models.yolo2 import light_region_loss
@@ -470,11 +472,9 @@ class YoloCocoDataset(TorchCocoDataset):
         gt_weights = np.ones(len(tlbr))
         return image, tlbr, gt_classes, gt_weights
 
-    # @ub.memoize_method
     def _load_image(self, index):
         return super()._load_image(index)
 
-    # @ub.memoize_method
     def _load_annotation(self, index):
         return super()._load_annotation(index)
 
@@ -503,7 +503,6 @@ class YoloCocoDataset(TorchCocoDataset):
             >>>     shapes.add(batch[0].shape[-1])
             >>> assert len(shapes) == 1
         """
-        import torch.utils.data.sampler as torch_sampler
         assert len(self) > 0, 'must have some data'
         if shuffle:
             if True:
@@ -568,7 +567,7 @@ class YoloHarn(nh.FitHarn):
             >>> harn = setup_harness(bsize=2)
             >>> harn.initialize()
             >>> batch = harn._demo_batch(0, 'test')
-            >>> weights_fpath = light_yolo.demo_weights()
+            >>> weights_fpath = light_yolo.demo_voc_weights()
             >>> state_dict = harn.xpu.load(weights_fpath)['weights']
             >>> harn.model.module.load_state_dict(state_dict)
             >>> outputs, loss = harn.run_batch(batch)
@@ -596,7 +595,7 @@ class YoloHarn(nh.FitHarn):
             >>> harn = setup_harness(bsize=1)
             >>> harn.initialize()
             >>> batch = harn._demo_batch(0, 'train')
-            >>> #weights_fpath = light_yolo.demo_weights()
+            >>> #weights_fpath = light_yolo.demo_voc_weights()
             >>> #state_dict = harn.xpu.load(weights_fpath)['weights']
             >>> #harn.model.module.load_state_dict(state_dict)
             >>> outputs, loss = harn.run_batch(batch)
@@ -621,14 +620,7 @@ class YoloHarn(nh.FitHarn):
 
             # Visualize a random prediction each epoch
             if harn.bxs[harn.current_tag] == 0:
-                fig = nh.util.mplutil.figure(fnum=1)
-                harn.visualize_prediction(batch, outputs, postout, idx=0,
-                                          thresh=0.2)
-                img = nh.util.mplutil.render_figure_to_image(fig)
-                dump_dpath = ub.ensuredir((harn.train_dpath, 'dump'))
-                dump_fname = 'pred_{:08d}.png'.format(harn.epoch)
-                fpath = os.path.join(dump_dpath, dump_fname)
-                nh.util.imwrite(fpath, img)
+                harn.dump_batch_item(batch, outputs, postout)
 
         metrics_dict = ub.odict()
         metrics_dict['L_bbox'] = float(harn.criterion.loss_coord)
@@ -646,10 +638,10 @@ class YoloHarn(nh.FitHarn):
         Example:
             >>> harn = setup_harness(bsize=4)
             >>> harn.initialize()
-            >>> batch = harn._demo_batch(0, 'test')
-            >>> weights_fpath = light_yolo.demo_weights()
-            >>> state_dict = harn.xpu.load(weights_fpath)['weights']
-            >>> harn.model.module.load_state_dict(state_dict)
+            >>> batch = harn._demo_batch(0, 'vali')
+            >>> #weights_fpath = light_yolo.demo_voc_weights()
+            >>> #state_dict = harn.xpu.load(weights_fpath)['weights']
+            >>> #harn.model.module.load_state_dict(state_dict)
             >>> outputs, loss = harn.run_batch(batch)
             >>> # run a few batches
             >>> harn.on_batch(batch, outputs, loss)
@@ -812,7 +804,7 @@ class YoloHarn(nh.FitHarn):
         return predictions, truth
 
     def visualize_prediction(harn, batch, outputs, postout, idx=0,
-                             thresh=None):
+                             thresh=None, orig_img=None):
         """
         Returns:
             np.ndarray: numpy image
@@ -860,18 +852,82 @@ class YoloHarn(nh.FitHarn):
         letterbox = harn.datasets['train'].letterbox
         img = letterbox._img_letterbox_invert(hwc01, orig_size, target_size)
         img = np.clip(img, 0, 1)
+        if orig_img is not None:
+            # we are given the original image, to avoid artifacts from
+            # inverting a downscale
+            assert orig_img.shape == img.shape
+
         true_cxywh_ = letterbox._boxes_letterbox_invert(true_boxes_, orig_size, target_size)
         pred_cxywh_ = letterbox._boxes_letterbox_invert(pred_boxes_, orig_size, target_size)
 
         from netharn.util import mplutil
         shift, scale, embed_size = letterbox._letterbox_transform(orig_size, target_size)
 
-        mplutil.figure(doclf=True, fnum=1)
+        fig = mplutil.figure(doclf=True, fnum=1)
         mplutil.imshow(img, colorspace='rgb')
         mplutil.draw_boxes(true_cxywh_.data, color='green', box_format='cxywh', labels=true_labels)
         mplutil.draw_boxes(pred_cxywh_.data, color='blue', box_format='cxywh', labels=pred_labels)
+        return fig
 
         # mplutil.show_if_requested()
+
+    def _pick_dumpcats(harn):
+        """
+        Hack to pick several images from the validation set to monitor each
+        epoch.
+        """
+        vali_dset = harn.loaders['vali'].dataset
+        chosen_gids = set()
+        for cid, gids in vali_dset.dset.cid_to_gids.items():
+            for gid in gids:
+                if gid not in chosen_gids:
+                    chosen_gids.add(gid)
+                    break
+        for gid, aids in vali_dset.dset.gid_to_aids.items():
+            if len(aids) == 0:
+                chosen_gids.add(gid)
+                break
+
+        gid_to_index = {
+            img['id']: index
+            for index, img in enumerate(vali_dset.dset.dataset['images'])}
+
+        chosen_indices = list(ub.take(gid_to_index, chosen_gids))
+        harn.chosen_indices = sorted(chosen_indices)
+
+    def _dump_chosen_validation_data(harn):
+        """
+        Dump a visualization of the validation images to disk
+        """
+        if not hasattr(harn, 'chosen_indices'):
+            harn._pick_dumpcats()
+
+        vali_dset = harn.loaders['vali'].dataset
+        for indices in ub.chunks(harn.chosen_indices, 16):
+            to_collate = [vali_dset[index] for index in indices]
+            raw_batch = nh.data.collate.padded_collate(to_collate)
+            batch = harn.prepare_batch(raw_batch)
+            outputs, loss = harn.run_batch(batch)
+            postout = harn.model.module.postprocess(outputs)
+
+            for idx, index in enumerate(indices):
+                orig_img = vali_dset._load_image(index)
+                fig = harn.visualize_prediction(batch, outputs, postout, idx=idx,
+                                                thresh=0.2, orig_img=orig_img)
+                img = nh.util.mplutil.render_figure_to_image(fig)
+                dump_dpath = ub.ensuredir((harn.train_dpath, 'dump'))
+                dump_fname = 'pred_{:04d}_{:08d}.png'.format(index, harn.epoch)
+                fpath = os.path.join(dump_dpath, dump_fname)
+                nh.util.imwrite(fpath, img)
+
+    def dump_batch_item(harn, batch, outputs, postout):
+        fig = harn.visualize_prediction(batch, outputs, postout, idx=0,
+                                        thresh=0.2)
+        img = nh.util.mplutil.render_figure_to_image(fig)
+        dump_dpath = ub.ensuredir((harn.train_dpath, 'dump'))
+        dump_fname = 'pred_{:08d}.png'.format(harn.epoch)
+        fpath = os.path.join(dump_dpath, dump_fname)
+        nh.util.imwrite(fpath, img)
 
     def deploy(harn):
         """
@@ -881,17 +937,14 @@ class YoloHarn(nh.FitHarn):
 
 
 def load_coco_datasets():
-    import glob
     import wrangle
     # annot_globstr = ub.truepath('~/data/viame-challenge-2018/phase0-annotations/*.json')
-    annot_globstr = ub.truepath('~/data/viame-challenge-2018/phase0-annotations/mbari_seq0.mscoco.json')
-    img_root = ub.truepath('~/data/viame-challenge-2018/phase0-imagery')
+    # annot_globstr = ub.truepath('~/data/viame-challenge-2018/phase0-annotations/mbari_seq0.mscoco.json')
+    # img_root = ub.truepath('~/data/viame-challenge-2018/phase0-imagery')
 
-    REAL_RUN = True
-    if REAL_RUN:
-        # Contest training data on hermes
-        annot_globstr = ub.truepath('~/data/noaa/training_data/annotations/*/*-coarse-bbox-only*.json')
-        img_root = ub.truepath('~/data/noaa/training_data/imagery/')
+    # Contest training data on hermes
+    annot_globstr = ub.truepath('~/data/noaa/training_data/annotations/*/*-coarse-bbox-only*.json')
+    img_root = ub.truepath('~/data/noaa/training_data/imagery/')
 
     fpaths = sorted(glob.glob(annot_globstr))
     # Remove keypoints annotation data (hack)
@@ -923,9 +976,9 @@ def load_coco_datasets():
 
         # HACK: wont need to do this for the released challenge data
         # probably wont hurt though
-        if not REAL_RUN:
-            merged._remove_keypoint_annotations()
-            merged._run_fixes()
+        # if not REAL_RUN:
+        #     merged._remove_keypoint_annotations()
+        #     merged._run_fixes()
 
         train_dset, vali_dset = wrangle.make_train_vali(merged)
 
