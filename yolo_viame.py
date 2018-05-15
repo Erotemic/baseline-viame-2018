@@ -916,7 +916,7 @@ class YoloHarn(nh.FitHarn):
             for idx, index in enumerate(indices):
                 orig_img = vali_dset._load_image(index)
                 fig = harn.visualize_prediction(batch, outputs, postout, idx=idx,
-                                                thresh=0.2, orig_img=orig_img)
+                                                thresh=0.1, orig_img=orig_img)
                 img = nh.util.mplutil.render_figure_to_image(fig)
                 dump_dpath = ub.ensuredir((harn.train_dpath, 'dump'))
                 dump_fname = 'pred_{:04d}_{:08d}.png'.format(index, harn.epoch)
