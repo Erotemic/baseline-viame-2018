@@ -616,7 +616,13 @@ class YoloHarn(nh.FitHarn):
             inputs, labels = batch
             inp_size = np.array(inputs.shape[-2:][::-1])
 
-            postout = harn.model.module.postprocess(outputs)
+            try:
+                postout = harn.model.module.postprocess(outputs)
+            except Exception as ex:
+                print('\n\n\n')
+                print('ERROR: FAILED TO POSTPROCESS OUTPUTS')
+                print('DETAILS: {!r}'.format(ex))
+                raise
 
             for y in harn._measure_confusion(postout, labels, inp_size):
                 harn.batch_confusions.append(y)
