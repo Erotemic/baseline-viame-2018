@@ -1128,6 +1128,10 @@ def train():
             python ~/code/baseline-viame-2018/yolo_viame.py train \
             --nice baseline1 --batch_size=16 --workers=4 --gpu=0
 
+    srun -c 4 -p community --gres=gpu:1 \
+            python ~/code/baseline-viame-2018/yolo_viame.py train \
+            --nice dummy --batch_size=16 --limit=400 --workers=0 --gpu=0 --lr=0.000001
+
     """
     harn = setup_harness()
     harn.run()
