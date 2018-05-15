@@ -621,10 +621,6 @@ class YoloHarn(nh.FitHarn):
             for y in harn._measure_confusion(postout, labels, inp_size):
                 harn.batch_confusions.append(y)
 
-            # Visualize a random prediction each epoch
-            if harn.bxs[harn.current_tag] == 0:
-                harn.dump_batch_item(batch, outputs, postout)
-
         metrics_dict = ub.odict()
         metrics_dict['L_bbox'] = float(harn.criterion.loss_coord)
         metrics_dict['L_iou'] = float(harn.criterion.loss_conf)
@@ -654,6 +650,8 @@ class YoloHarn(nh.FitHarn):
             >>> harn.on_epoch()
         """
         tag = harn.current_tag
+        if tag == 'vali':
+            harn._dump_chosen_validation_data()
         if harn.batch_confusions:
             y = pd.concat([pd.DataFrame(y) for y in harn.batch_confusions])
             # TODO: write out a few visualizations
