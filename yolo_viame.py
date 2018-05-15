@@ -900,6 +900,8 @@ class YoloHarn(nh.FitHarn):
         """
         Dump a visualization of the validation images to disk
         """
+        print('DUMP CHOSEN INDICES')
+
         if not hasattr(harn, 'chosen_indices'):
             harn._pick_dumpcats()
 
