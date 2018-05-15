@@ -15,110 +15,29 @@ Ignore:
 """
 import os
 from os.path import join
-from clab.util import profiler  # NOQA
-import psutil
 import torch
 import cv2
 import ubelt as ub
-import numpy as np
-import imgaug as ia
 import pandas as pd
+import numpy as np
 import imgaug.augmenters as iaa
-from clab.models.yolo2.utils import yolo_utils as yolo_utils
-from clab.models.yolo2 import multiscale_batch_sampler
-from clab import hyperparams
-from clab import xpu_device
-from clab import fit_harness
-from clab import monitor
-from clab import nninit
-from clab.data import voc
-from clab.lr_scheduler import ListedLR
-from clab.models.yolo2 import darknet
-from clab.models.yolo2 import darknet_loss
 import torch.utils.data as torch_data
+import netharn as nh
+from netharn.models.yolo2 import multiscale_batch_sampler
+from netharn.models.yolo2 import light_region_loss
+from netharn.models.yolo2 import light_yolo
 
-
-class DataConfig(object):
-    def __init__(cfg):
-        pass
-
-    @classmethod
-    def phase0(DataConfig):
-        # import viame_wrangler
-        # other = viame_wrangler.config.WrangleConfig()
-
-        # cfg = DataConfig()
-        # cfg.workdir = other.workdir
-        # cfg.img_root = other.img_root
-        # cfg.train_fpath = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-train.mscoco.json')
-        # cfg.vali_fapth = join(other.challenge_work_dir, 'phase0-coarse-bbox-only-val.mscoco.json')
-        # return cfg
-        cfg = DataConfig()
-        cfg.workdir = ub.truepath(ub.argval('--work', default='~/work/viame-challenge-2018'))
-        cfg.img_root = ub.truepath(ub.argval('--img_root', default='~/data/viame-challenge-2018/phase0-imagery'))
-        cfg.train_fpath = join(cfg.workdir, 'train.mscoco.json')
-        cfg.vali_fapth = join(cfg.workdir, 'vali.mscoco.json')
-        return cfg
-
-    @classmethod
-    def phase1(DataConfig):
-        # import viame_wrangler
-        # other = viame_wrangler.config.WrangleConfig()
-        # cfg.workdir = other.workdir
-        # cfg.img_root = other.img_root
-
-        cfg = DataConfig()
-        cfg.workdir = ub.truepath(ub.argval('--work', default='~/work/viame-challenge-2018'))
-        cfg.img_root = ub.truepath(ub.argval('--img_root', default='~/data/viame-challenge-2018/phase1-imagery'))
-        cfg.train_fpath = join(cfg.workdir, 'train.mscoco.json')
-        cfg.vali_fapth = join(cfg.workdir, 'vali.mscoco.json')
-        return cfg
+from coco_wrangler import coco_api
 
 
 class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
     """
     Example:
-        >>> self = TorchCocoDataset()
-        >>> index = 139
-
-    Ignore:
-        for index in ub.ProgIter(range(len(self))):
-            self._load_annotation(index)
-
-        self.check_images_exist()
-
-        self = TorchCocoDataset()
-
-        # hack
-        img = np.random.rand(1000, 1000, 3)
-        import types
-        types.MethodType
-        def _load_image(self, index):
-            return img
-
-        inject_method(self, _load_image)
-
-        for index in ub.ProgIter(range(len(self)), freq=1, adjust=0):
-            try:
-                self[index]
-                # self._load_item(index, (10, 10))
-            except IOError as ex:
-                print('index = {!r}'.format(index))
-                print('ex = {!r}\n'.format(ex))
-
-        img = self.dset.dataset['images'][index]
-
+        >>> dset = coco_api.CocoDataset(coco_api.demo_coco_data())
+        >>> self = TorchCocoDataset(dset)
     """
-    def __init__(self, coco_fpath=None, img_root=None):
-
-        if coco_fpath is None and img_root is None:
-            cfg = DataConfig.phase1()
-            coco_fpath = cfg.train_fpath
-            img_root = cfg.img_root
-
-        from coco_wrangler import CocoDataset
-        self.coco_fpath = coco_fpath
-        self.dset = CocoDataset(coco_fpath, img_root=img_root)
+    def __init__(self, coco_dset):
+        self.dset = coco_dset
 
         self.label_names = sorted(self.dset.name_to_cat,
                                   key=lambda n: self.dset.name_to_cat[n]['id'])
@@ -128,7 +47,11 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         self.num_images = len(self.dset.imgs)
 
         self.num_classes = len(self.label_names)
-        self.input_id = os.path.basename(self.coco_fpath)
+        try:
+            self.input_id = ub.hash_data(self.dset.dataset)
+        except TypeError:
+            self.input_id = ub.hash_data(ub.repr2(self.dset.dataset, nl=0))
+        # self.input_id = os.path.basename(self.coco_fpath)
 
         if False:
             # setup heirarchy
@@ -145,10 +68,10 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
     def check_images_exist(self):
         """
         Example:
-            >>> cfg = DataConfig.phase1()
-            >>> self = YoloCocoDataset(cfg.train_fpath, cfg.img_root)
+            >>> coco_dsets = load_coco_datasets()
+            >>> self = TorchCocoDataset(coco_dsets['train'])
             >>> self.check_images_exist()
-            >>> self = YoloCocoDataset(cfg.vali_fapth, cfg.img_root)
+            >>> self = TorchCocoDataset(coco_dsets['vali'])
             >>> self.check_images_exist()
         """
         bad_paths = []
@@ -163,61 +86,6 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
 
     def __nice__(self):
         return '{} {}'.format(self.input_id, len(self))
-
-    def make_loader(self, *args, **kwargs):
-        """
-        We need to do special collation to deal with different numbers of
-        bboxes per item.
-
-        Args:
-            batch_size (int, optional):
-            shuffle (bool, optional):
-            sampler (Sampler, optional):
-            batch_sampler (Sampler, optional):
-            num_workers (int, optional):
-            pin_memory (bool, optional):
-            drop_last (bool, optional):
-            timeout (numeric, optional):
-            worker_init_fn (callable, optional):
-
-        References:
-            https://github.com/pytorch/pytorch/issues/1512
-
-        Example:
-            >>> self = TorchCocoDataset()
-            >>> #inbatch = [self[i] for i in range(10)]
-            >>> loader = self.make_loader(batch_size=10)
-            >>> batch = next(iter(loader))
-            >>> images, labels = batch
-            >>> assert len(images) == 10
-            >>> assert len(labels) == 2
-            >>> assert len(labels[0]) == len(images)
-        """
-        # def custom_collate_fn(inbatch):
-        #     # we know the order of data in __getitem__ so we can choose not to
-        #     # stack the variable length bboxes and labels
-        #     default_collate = torch_data.dataloader.default_collate
-        #     inimgs, inlabels = list(map(list, zip(*inbatch)))
-        #     imgs = default_collate(inimgs)
-
-        #     # Just transpose the list if we cant collate the labels
-        #     # However, try to collage each part.
-        #     n_labels = len(inlabels[0])
-        #     labels = [None] * n_labels
-        #     for i in range(n_labels):
-        #         simple = [x[i] for x in inlabels]
-        #         if ub.allsame(map(len, simple)):
-        #             labels[i] = default_collate(simple)
-        #         else:
-        #             labels[i] = simple
-
-        #     batch = imgs, labels
-        #     return batch
-        # # kwargs['collate_fn'] = custom_collate_fn
-        from clab.data import collate
-        kwargs['collate_fn'] = collate.list_collate
-        loader = torch_data.DataLoader(self, *args, **kwargs)
-        return loader
 
     def __len__(self):
         return self.num_images
@@ -234,13 +102,14 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
             python ~/code/baseline-viame-2018/yolo_viame.py TorchCocoDataset.__getitem__ --show
 
         Example:
-            >>> self = TorchCocoDataset()
-            >>> index = 100
+            >>> dset = coco_api.CocoDataset(coco_api.demo_coco_data())
+            >>> self = TorchCocoDataset(dset)
+            >>> index = 0
             >>> chw, label = self[index]
             >>> hwc = chw.numpy().transpose(1, 2, 0)
             >>> boxes, class_idxs = label
             >>> # xdoc: +REQUIRES(--show)
-            >>> from clab.util import mplutil
+            >>> from netharn.util import mplutil
             >>> mplutil.qtensure()  # xdoc: +SKIP
             >>> mplutil.figure(fnum=1, doclf=True)
             >>> mplutil.imshow(hwc, colorspace='rgb')
@@ -268,6 +137,8 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         gt_classes = annot['gt_classes']
 
         # squish the bounding box and image into a standard size
+        # THIS CODE IS UNUSED ANYWAY
+        # DEPRICATE: DONT SQUISH, USE LETTERBOX PADDING
         w, h = inp_size
         sx = float(w) / imrgb_255.shape[1]
         sy = float(h) / imrgb_255.shape[0]
@@ -307,19 +178,25 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
         gt_labels = []
         for aid in aids:
             ann = self.dset.anns[aid]
-            if ann['area'] == 0:
-                continue
-            box = np.array(ann['bbox']).copy()
-            box[2:4] += box[0:2]
+            # HACK
+            # if 'bbox' not in ann:
+            #     continue
+            xywh = nh.util.Boxes(np.array(ann['bbox']), 'xywh')
+            # if xywh.area[0] == 0:
+            #     continue
+            tlbr = xywh.toformat('tlbr')
             cid = ann['category_id']
             cname = self.dset.cats[cid]['name']
             cind = self._class_to_ind[cname]
             gt_labels.append(cind)
-            boxes.append(box)
+            boxes.append(tlbr.data)
+            aids.append(aid)
 
         annot = {
             'boxes': np.array(boxes, dtype=np.float32).reshape(-1, 4),
             'gt_classes': np.array(gt_labels),
+            'gid': gid,
+            'aids': aids,
         }
         return annot
 
@@ -328,23 +205,10 @@ class YoloCocoDataset(TorchCocoDataset):
     """
     Extends CocoDataset localization dataset (which simply loads the images
     with minimal processing) for multiscale training.
-
-    Example:
-        >>> assert len(YoloCocoDataset(split='train')) == 2501
-        >>> assert len(YoloCocoDataset(split='test')) == 4952
-        >>> assert len(YoloCocoDataset(split='val')) == 2510
-
-    Example:
-        >>> self = CocoDataset()
-        >>> for i in range(10):
-        ...     a, bc = self[i]
-        ...     #print(bc[0].shape)
-        ...     print(bc[1].shape)
-        ...     print(a.shape)
     """
 
-    def __init__(self, *args, **kw):
-        super(YoloCocoDataset, self).__init__(*args, **kw)
+    def __init__(self, coco_dset, train=False):
+        super().__init__(coco_dset)
 
         self.factor = 32  # downsample factor of yolo grid
         self.base_wh = np.array([416, 416], dtype=np.int)
@@ -363,26 +227,16 @@ class YoloCocoDataset(TorchCocoDataset):
         self.num_anchors = len(self.anchors)
         self.augmenter = None
 
-        if 'train' in self.input_id:
+        if train:
+            import netharn.data.transforms  # NOQA
+            from netharn.data.transforms import HSVShift
             augmentors = [
+                HSVShift(hue=0.1, sat=1.5, val=1.5),
+                iaa.Crop(percent=(0, .2)),
                 iaa.Fliplr(p=.5),
-                iaa.Flipud(p=.5),
-                iaa.Affine(
-                    scale={"x": (1.0, 1.01), "y": (1.0, 1.01)},
-                    translate_percent={"x": (-0.1, 0.1), "y": (-0.1, 0.1)},
-                    rotate=(-15, 15),
-                    shear=(-7, 7),
-                    order=[0, 1, 3],
-                    cval=(0, 255),
-                    # use any of scikit-image's warping modes (see 2nd image from the top for examples)
-                    mode=ia.ALL,
-                    # Note: currently requires imgaug master version
-                    backend='cv2',
-                ),
-                iaa.AddToHueAndSaturation((-20, 20)),  # change hue and saturation
-                iaa.ContrastNormalization((0.5, 2.0), per_channel=0.5),  # improve or worsen the contrast
             ]
             self.augmenter = iaa.Sequential(augmentors)
+        self.letterbox = nh.data.transforms.Resize(None, mode='letterbox')
 
     # @profiler.profile
     def __getitem__(self, index):
@@ -391,390 +245,685 @@ class YoloCocoDataset(TorchCocoDataset):
             python ~/code/baseline-viame-2018/yolo_viame.py TorchCocoDataset.__getitem__ --show
 
         Example:
-            >>> self = YoloCocoDataset()
-            >>> index = 831
+            >>> dset = coco_api.CocoDataset(coco_api.demo_coco_data())
+            >>> self = YoloCocoDataset(dset, train=1)
+            >>> index = 0
             >>> chw01, label = self[index]
             >>> hwc01 = chw01.numpy().transpose(1, 2, 0)
             >>> print(hwc01.shape)
-            >>> boxes, gt_classes, orig_size, index, gt_weights = label
+            >>> target, gt_weights, orig_size, index, bg_weight = label
             >>> # xdoc: +REQUIRES(--show)
-            >>> from clab.util import mplutil
+            >>> from netharn.util import mplutil
             >>> mplutil.figure(doclf=True, fnum=1)
             >>> mplutil.qtensure()  # xdoc: +SKIP
+            >>> inp_size = hwc01.shape[0:2][::-1]
+            >>> boxes = nh.util.Boxes(np.atleast_2d(target.numpy())[:, -4:], 'cxywh').scale(inp_size)
             >>> mplutil.imshow(hwc01, colorspace='rgb')
-            >>> mplutil.draw_boxes(boxes.numpy(), box_format='tlbr')
+            >>> mplutil.draw_boxes(boxes.toformat('xywh').data, 'xywh')
+
+        Ignore:
+            >>> harn = setup_harness()
+            >>> self = harn.hyper.make_loaders()['train'].dataset
+            >>> index = 3
+            >>> chw01, label = self[index]
+            >>> hwc01 = chw01.numpy().transpose(1, 2, 0)
+            >>> print(hwc01.shape)
+            >>> target, gt_weights, orig_size, index, bg_weight = label
+            >>> # xdoc: +REQUIRES(--show)
+            >>> from netharn.util import mplutil
+            >>> mplutil.figure(doclf=True, fnum=1)
+            >>> mplutil.qtensure()  # xdoc: +SKIP
+            >>> inp_size = hwc01.shape[0:2][::-1]
+            >>> boxes = nh.util.Boxes(nh.util.atleast_nd(target.numpy(), 2)[:, -4:], 'cxywh').scale(inp_size)
+            >>> mplutil.imshow(hwc01, colorspace='rgb')
+            >>> mplutil.draw_boxes(boxes.toformat('xywh').data, 'xywh')
+
+            dset = self.dset
+
+            annot = self._load_annotation(index)
+            gid = annot['gid']
+
+            gid = ub.argmax(ub.map_vals(len, dset.gid_to_aids))
+
+            index = dset.dataset['images'].index(self.dset.imgs[6407])
+            gid = dset.dataset['images'][index]['id']
+            len(dset.gid_to_aids[gid])
+
+            self.dset.gid_to_aids[gid]
+
         """
         if isinstance(index, tuple):
             # Get size index from the batch loader
             index, size_index = index
-            inp_size = self.multi_scale_inp_size[size_index]
+            if size_index is None:
+                inp_size = self.base_wh
+            else:
+                inp_size = self.multi_scale_inp_size[size_index]
         else:
-            inp_size = self.base_size
+            inp_size = self.base_wh
+        inp_size = np.array(inp_size)
 
-        # load the raw data
-        # hwc255, boxes, gt_classes = self._load_item(index, inp_size)
-
-        # load the raw data from VOC
-        image = self._load_image(index)
-        annot = self._load_annotation(index)
-
-        # VOC loads annotations in tlbr, but yolo expects xywh
-        tlbr = annot['boxes'].astype(np.float32)
-        gt_classes = annot['gt_classes']
-
-        # Weight samples so we dont care about difficult cases
-        gt_weights = np.ones(len(tlbr))
-
-        # squish the bounding box and image into a standard size
-        w, h = inp_size
-        im_w, im_h = image.shape[0:2][::-1]
-        sx = float(w) / im_w
-        sy = float(h) / im_h
-        tlbr[:, 0::2] *= sx
-        tlbr[:, 1::2] *= sy
-        interpolation = cv2.INTER_AREA if (sx + sy) <= 2 else cv2.INTER_CUBIC
-        hwc255 = cv2.resize(image, (w, h), interpolation=interpolation)
+        image, tlbr, gt_classes, gt_weights = self._load_item(index)
+        orig_size = np.array(image.shape[0:2][::-1])
+        bbs = nh.util.Boxes(tlbr, 'tlbr').to_imgaug(shape=image.shape)
 
         if self.augmenter:
             # Ensure the same augmentor is used for bboxes and iamges
             seq_det = self.augmenter.to_deterministic()
 
-            try:
+            image = seq_det.augment_image(image)
+            bbs = seq_det.augment_bounding_boxes([bbs])[0]
 
-                hwc255 = seq_det.augment_image(hwc255)
+            # Clip any bounding boxes that went out of bounds
+            h, w = image.shape[0:2]
+            tlbr = nh.util.Boxes.from_imgaug(bbs)
+            tlbr = tlbr.clip(0, 0, w - 1, h - 1, inplace=True)
 
-                bbs = ia.BoundingBoxesOnImage(
-                    [ia.BoundingBox(x1, y1, x2, y2)
-                     for x1, y1, x2, y2 in tlbr], shape=hwc255.shape)
-                bbs = seq_det.augment_bounding_boxes([bbs])[0]
+            # Remove any boxes that are no longer visible or out of bounds
+            flags = (tlbr.area > 0).ravel()
+            tlbr = tlbr.compress(flags, inplace=True)
+            gt_classes = gt_classes[flags]
+            gt_weights = gt_weights[flags]
 
-                tlbr = np.array([[bb.x1, bb.y1, bb.x2, bb.y2]
-                                  for bb in bbs.bounding_boxes])
-                tlbr = yolo_utils.clip_boxes(tlbr, hwc255.shape[0:2])
+            bbs = tlbr.to_imgaug(shape=image.shape)
 
-            except Exception:
-                print('\n\n!!!!!!!!!!!\n\n')
-                print('tlbr = {}'.format(ub.repr2(tlbr, nl=1)))
-                print('ERROR index = {!r}'.format(index))
-                print('\n\n!!!!!!!!!!!\n\n')
-                raise
+        # Apply letterbox resize transform to train and test
+        self.letterbox.target_size = inp_size
+        image = self.letterbox.augment_image(image)
+        bbs = self.letterbox.augment_bounding_boxes([bbs])[0]
+        tlbr_inp = nh.util.Boxes.from_imgaug(bbs)
 
-        chw01 = torch.FloatTensor(hwc255.transpose(2, 0, 1) / 255)
-        gt_classes = torch.LongTensor(gt_classes)
+        # Remove any boxes that are no longer visible or out of bounds
+        flags = (tlbr_inp.area > 0).ravel()
+        tlbr_inp = tlbr_inp.compress(flags, inplace=True)
+        gt_classes = gt_classes[flags]
+        gt_weights = gt_weights[flags]
 
-        # The original YOLO-v2 works in xywh, but this implementation seems to
-        boxes = torch.FloatTensor(tlbr)
+        chw01 = torch.FloatTensor(image.transpose(2, 0, 1) / 255.0)
+
+        # Lightnet YOLO accepts truth tensors in the format:
+        # [class_id, center_x, center_y, w, h]
+        # where coordinates are noramlized between 0 and 1
+        cxywh_norm = tlbr_inp.toformat('cxywh').scale(1 / inp_size)
+        _target_parts = [gt_classes[:, None], cxywh_norm.data]
+        target = np.concatenate(_target_parts, axis=-1)
+        target = torch.FloatTensor(target)
 
         # Return index information in the label as well
-        orig_size = torch.LongTensor([im_w, im_h])
+        orig_size = torch.LongTensor(orig_size)
         index = torch.LongTensor([index])
+        # how much do we care about each annotation in this image?
         gt_weights = torch.FloatTensor(gt_weights)
-        label = (boxes, gt_classes, orig_size, index, gt_weights)
+        # how much do we care about the background in this image?
+        bg_weight = torch.FloatTensor([1.0])
+        label = (target, gt_weights, orig_size, index, bg_weight)
 
         return chw01, label
 
+    def _load_item(self, index):
+        # load the raw data from VOC
+        image = self._load_image(index)
+        annot = self._load_annotation(index)
+        # VOC loads annotations in tlbr
+        tlbr = annot['boxes'].astype(np.float)
+        gt_classes = annot['gt_classes']
+        # Weight samples so we dont care about difficult cases
+        gt_weights = np.ones(len(tlbr))
+        return image, tlbr, gt_classes, gt_weights
+
     # @ub.memoize_method
     def _load_image(self, index):
-        return super(YoloCocoDataset, self)._load_image(index)
+        return super()._load_image(index)
 
     # @ub.memoize_method
     def _load_annotation(self, index):
-        return super(YoloCocoDataset, self)._load_annotation(index)
+        return super()._load_annotation(index)
 
+    def make_loader(self, batch_size=16, num_workers=0, shuffle=False,
+                    pin_memory=False):
+        """
+        Example:
+            >>> torch.random.manual_seed(0)
+            >>> datasets = {'train': YoloCocoDataset()}
+            >>> loaders = make_loaders(datasets)
+            >>> train_iter = iter(loaders['train'])
+            >>> # training batches should have multiple shapes
+            >>> shapes = set()
+            >>> for batch in train_iter:
+            >>>     shapes.add(batch[0].shape[-1])
+            >>>     if len(shapes) > 1:
+            >>>         break
+            >>> assert len(shapes) > 1
 
-def make_loaders(datasets, batch_size=16, workers=0):
-    """
-    Example:
-        >>> torch.random.manual_seed(0)
-        >>> datasets = {'train': YoloCocoDataset()}
-        >>> loaders = make_loaders(datasets)
-        >>> train_iter = iter(loaders['train'])
-        >>> # training batches should have multiple shapes
-        >>> shapes = set()
-        >>> for batch in train_iter:
-        >>>     shapes.add(batch[0].shape[-1])
-        >>>     if len(shapes) > 1:
-        >>>         break
-        >>> assert len(shapes) > 1
-
-        >>> vali_loader = iter(loaders['vali'])
-        >>> vali_iter = iter(loaders['vali'])
-        >>> # vali batches should have one shape
-        >>> shapes = set()
-        >>> for batch, _ in zip(vali_iter, [1, 2, 3, 4]):
-        >>>     shapes.add(batch[0].shape[-1])
-        >>> assert len(shapes) == 1
-    """
-    loaders = {}
-    for key, dset in datasets.items():
-        assert len(dset) > 0, 'must have some data'
+            >>> vali_loader = iter(loaders['vali'])
+            >>> vali_iter = iter(loaders['vali'])
+            >>> # vali batches should have one shape
+            >>> shapes = set()
+            >>> for batch, _ in zip(vali_iter, [1, 2, 3, 4]):
+            >>>     shapes.add(batch[0].shape[-1])
+            >>> assert len(shapes) == 1
+        """
+        assert len(self) > 0, 'must have some data'
         # use custom sampler that does multiscale training
         batch_sampler = multiscale_batch_sampler.MultiScaleBatchSampler(
-            dset, batch_size=batch_size, shuffle=(key == 'train')
+            self, batch_size=batch_size, shuffle=shuffle
         )
-        loader = dset.make_loader(batch_sampler=batch_sampler,
-                                  num_workers=workers)
-        loader.batch_size = batch_size
-        loaders[key] = loader
-    return loaders
+        loader = torch_data.DataLoader(self, batch_sampler=batch_sampler,
+                                       collate_fn=nh.data.collate.padded_collate,
+                                       num_workers=num_workers,
+                                       pin_memory=pin_memory)
+        if loader.batch_size != batch_size:
+            try:
+                loader.batch_size = batch_size
+            except Exception:
+                pass
+        return loader
 
 
-def ensure_ulimit():
-    # NOTE: It is important to have a high enought ulimit for DataParallel
-    try:
-        import resource
-        rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-        if rlimit[0] <= 8192:
-            resource.setrlimit(resource.RLIMIT_NOFILE, (8192, rlimit[1]))
-    except Exception:
-        print('Unable to fix ulimit. Ensure manually')
-        raise
+class YoloHarn(nh.FitHarn):
+    def __init__(harn, **kw):
+        super().__init__(**kw)
+        harn.batch_confusions = []
+        harn.aps = {}
+
+    def prepare_batch(harn, raw_batch):
+        """
+        ensure batch is in a standardized structure
+        """
+        batch_inputs, batch_labels = raw_batch
+
+        inputs = harn.xpu.variable(batch_inputs)
+        labels = [harn.xpu.variable(d) for d in batch_labels]
+
+        batch = (inputs, labels)
+        return batch
+
+    def run_batch(harn, batch):
+        """
+        Connect data -> network -> loss
+
+        Args:
+            batch: item returned by the loader
+
+        Example:
+            >>> harn = setup_harness(bsize=2)
+            >>> harn.initialize()
+            >>> batch = harn._demo_batch(0, 'test')
+            >>> weights_fpath = light_yolo.demo_weights()
+            >>> state_dict = harn.xpu.load(weights_fpath)['weights']
+            >>> harn.model.module.load_state_dict(state_dict)
+            >>> outputs, loss = harn.run_batch(batch)
+        """
+
+        # Compute how many images have been seen before
+        bsize = harn.loaders['train'].batch_sampler.batch_size
+        nitems = len(harn.datasets['train'])
+        bx = harn.bxs['train']
+        n_seen = (bx * bsize) + (nitems * harn.epoch)
+
+        inputs, labels = batch
+        outputs = harn.model(inputs)
+        # torch.cuda.synchronize()
+        target, gt_weights, orig_sizes, indices, bg_weights = labels
+        loss = harn.criterion(outputs, target, seen=n_seen)
+        # torch.cuda.synchronize()
+        return outputs, loss
+
+    def on_batch(harn, batch, outputs, loss):
+        """
+        custom callback
+
+        Example:
+            >>> harn = setup_harness(bsize=1)
+            >>> harn.initialize()
+            >>> batch = harn._demo_batch(0, 'test')
+            >>> weights_fpath = light_yolo.demo_weights()
+            >>> state_dict = harn.xpu.load(weights_fpath)['weights']
+            >>> harn.model.module.load_state_dict(state_dict)
+            >>> outputs, loss = harn.run_batch(batch)
+            >>> harn.on_batch(batch, outputs, loss)
+            >>> # xdoc: +REQUIRES(--show)
+            >>> postout = harn.model.module.postprocess(outputs)
+            >>> from netharn.util import mplutil
+            >>> mplutil.qtensure()  # xdoc: +SKIP
+            >>> harn.visualize_prediction(batch, outputs, postout, idx=0,
+            >>>                           thresh=0.01)
+            >>> mplutil.show_if_requested()
+        """
+        if harn.current_tag != 'train':
+            # Dont worry about computing mAP on the training set for now
+            inputs, labels = batch
+            inp_size = np.array(inputs.shape[-2:][::-1])
+
+            postout = harn.model.module.postprocess(outputs)
+
+            for y in harn._measure_confusion(postout, labels, inp_size):
+                harn.batch_confusions.append(y)
+
+        metrics_dict = ub.odict()
+        metrics_dict['L_bbox'] = float(harn.criterion.loss_coord)
+        metrics_dict['L_iou'] = float(harn.criterion.loss_conf)
+        metrics_dict['L_cls'] = float(harn.criterion.loss_cls)
+        for k, v in metrics_dict.items():
+            if not np.isfinite(v):
+                raise ValueError('{}={} is not finite'.format(k, v))
+        return metrics_dict
+
+    def on_epoch(harn):
+        """
+        custom callback
+
+        Example:
+            >>> harn = setup_harness(bsize=4)
+            >>> harn.initialize()
+            >>> batch = harn._demo_batch(0, 'test')
+            >>> weights_fpath = light_yolo.demo_weights()
+            >>> state_dict = harn.xpu.load(weights_fpath)['weights']
+            >>> harn.model.module.load_state_dict(state_dict)
+            >>> outputs, loss = harn.run_batch(batch)
+            >>> # run a few batches
+            >>> harn.on_batch(batch, outputs, loss)
+            >>> harn.on_batch(batch, outputs, loss)
+            >>> harn.on_batch(batch, outputs, loss)
+            >>> # then finish the epoch
+            >>> harn.on_epoch()
+        """
+        tag = harn.current_tag
+        if harn.batch_confusions:
+            y = pd.concat([pd.DataFrame(y) for y in harn.batch_confusions])
+            # TODO: write out a few visualizations
+            loader = harn.loaders[tag]
+            num_classes = len(loader.dataset.label_names)
+            labels = list(range(num_classes))
+            aps = nh.metrics.ave_precisions(y, labels, use_07_metric=True)
+            harn.aps[tag] = aps
+            mean_ap = np.nanmean(aps['ap'])
+            max_ap = np.nanmax(aps['ap'])
+            harn.log_value(tag + ' epoch mAP', mean_ap, harn.epoch)
+            harn.log_value(tag + ' epoch max-AP', max_ap, harn.epoch)
+            harn.batch_confusions.clear()
+            metrics_dict = ub.odict()
+            metrics_dict['max-AP'] = max_ap
+            metrics_dict['mAP'] = mean_ap
+            return metrics_dict
+
+    # Non-standard problem-specific custom methods
+
+    def _measure_confusion(harn, postout, labels, inp_size, **kw):
+        targets = labels[0]
+        gt_weights = labels[1]
+        # orig_sizes = labels[2]
+        # indices = labels[3]
+        bg_weights = labels[4]
+
+        def asnumpy(tensor):
+            return tensor.data.cpu().numpy()
+
+        bsize = len(labels[0])
+        for bx in range(bsize):
+            postitem = asnumpy(postout[bx])
+            target = asnumpy(targets[bx]).reshape(-1, 5)
+            true_cxywh   = target[:, 1:5]
+            true_cxs     = target[:, 0]
+            true_weight  = asnumpy(gt_weights[bx])
+
+            # Remove padded truth
+            flags = true_cxs != -1
+            true_cxywh  = true_cxywh[flags]
+            true_cxs    = true_cxs[flags]
+            true_weight = true_weight[flags]
+
+            # orig_size    = asnumpy(orig_sizes[bx])
+            # gx           = int(asnumpy(indices[bx]))
+
+            # how much do we care about the background in this image?
+            bg_weight = float(asnumpy(bg_weights[bx]))
+
+            # Unpack postprocessed predictions
+            sboxes = postitem.reshape(-1, 6)
+            pred_cxywh = sboxes[:, 0:4]
+            pred_scores = sboxes[:, 4]
+            pred_cxs = sboxes[:, 5].astype(np.int)
+
+            true_tlbr = nh.util.Boxes(true_cxywh, 'cxywh').to_tlbr()
+            pred_tlbr = nh.util.Boxes(pred_cxywh, 'cxywh').to_tlbr()
+
+            true_tlbr = true_tlbr.scale(inp_size)
+            pred_tlbr = pred_tlbr.scale(inp_size)
+
+            # TODO: can we invert the letterbox transform here and clip for
+            # some extra mAP?
+            true_boxes = true_tlbr.data
+            pred_boxes = pred_tlbr.data
+
+            y = nh.metrics.detection_confusions(
+                true_boxes=true_boxes,
+                true_cxs=true_cxs,
+                true_weights=true_weight,
+                pred_boxes=pred_boxes,
+                pred_scores=pred_scores,
+                pred_cxs=pred_cxs,
+                bg_weight=bg_weight,
+                bg_cls=-1,
+                ovthresh=harn.hyper.other['ovthresh'],
+                **kw
+            )
+            # y['gx'] = gx
+            yield y
+
+    def _postout_to_coco(harn, postout, labels, inp_size):
+        """
+        -[ ] TODO: dump predictions for the test set to disk and score using
+             someone elses code.
+        """
+        targets = labels[0]
+        gt_weights = labels[1]
+        orig_sizes = labels[2]
+        indices = labels[3]
+        # bg_weights = labels[4]
+
+        def asnumpy(tensor):
+            return tensor.data.cpu().numpy()
+
+        def undo_letterbox(cxywh):
+            boxes = nh.util.Boxes(cxywh, 'cxywh')
+            letterbox = harn.datasets['train'].letterbox
+            return letterbox._boxes_letterbox_invert(boxes, orig_size, inp_size)
+
+        predictions = []
+        truth = []
+
+        bsize = len(labels[0])
+        for bx in range(bsize):
+            postitem = asnumpy(postout[bx])
+            target = asnumpy(targets[bx]).reshape(-1, 5)
+            true_cxywh   = target[:, 1:5]
+            true_cxs     = target[:, 0]
+            true_weight  = asnumpy(gt_weights[bx])
+
+            # Remove padded truth
+            flags = true_cxs != -1
+            true_cxywh  = true_cxywh[flags]
+            true_cxs    = true_cxs[flags]
+            true_weight = true_weight[flags]
+
+            orig_size = asnumpy(orig_sizes[bx])
+            gx        = int(asnumpy(indices[bx]))
+
+            # how much do we care about the background in this image?
+            # bg_weight = float(asnumpy(bg_weights[bx]))
+
+            # Unpack postprocessed predictions
+            sboxes = postitem.reshape(-1, 6)
+            pred_cxywh = sboxes[:, 0:4]
+            pred_scores = sboxes[:, 4]
+            pred_cxs = sboxes[:, 5].astype(np.int)
+
+            true_xywh = undo_letterbox(true_cxywh).toformat('xywh').data
+            pred_xywh = undo_letterbox(pred_cxywh).toformat('xywh').data
+
+            for xywh, cx, score in zip(pred_xywh, pred_cxs, pred_scores):
+                pred = {
+                    'image_id': gx,
+                    'category_id': cx,
+                    'bbox': list(xywh),
+                    'score': score,
+                }
+                predictions.append(pred)
+
+            for xywh, cx, weight in zip(true_xywh, true_cxs, gt_weights):
+                true = {
+                    'image_id': gx,
+                    'category_id': cx,
+                    'bbox': list(xywh),
+                    'weight': weight,
+                }
+                truth.append(true)
+        return predictions, truth
+
+    def visualize_prediction(harn, batch, outputs, postout, idx=0, thresh=None):
+        """
+        Returns:
+            np.ndarray: numpy image
+        """
+        # xdoc: +REQUIRES(--show)
+        inputs, labels = batch
+        targets, gt_weights, orig_sizes, indices, bg_weights = labels
+        chw01 = inputs[idx]
+        target = targets[idx]
+        postitem = postout[idx]
+        orig_size = orig_sizes[idx].cpu().numpy()
+        # ---
+        hwc01 = chw01.cpu().numpy().transpose(1, 2, 0)
+        # TRUE
+        true_cxs = target[:, 0].long()
+        true_cxywh = target[:, 1:5]
+        flags = true_cxs != -1
+        true_cxywh = true_cxywh[flags]
+        true_cxs = true_cxs[flags]
+        # PRED
+        pred_cxywh = postitem[:, 0:4]
+        pred_scores = postitem[:, 4]
+        pred_cxs = postitem[:, 5]
+
+        if thresh is not None:
+            flags = pred_scores > thresh
+            pred_cxs = pred_cxs[flags]
+            pred_cxywh = pred_cxywh[flags]
+            pred_scores = pred_scores[flags]
+
+        pred_clsnms = list(ub.take(harn.datasets['train'].label_names,
+                                   pred_cxs.long().cpu().numpy()))
+        pred_labels = ['{}@{:.2f}'.format(n, s)
+                       for n, s in zip(pred_clsnms, pred_scores)]
+
+        true_labels = list(ub.take(harn.datasets['train'].label_names,
+                                   true_cxs.long().cpu().numpy()))
+        # ---
+        inp_size = np.array(hwc01.shape[0:2][::-1])
+        target_size = inp_size
+
+        true_boxes_ = nh.util.Boxes(true_cxywh.cpu().numpy(), 'cxywh').scale(inp_size)
+        pred_boxes_ = nh.util.Boxes(pred_cxywh.cpu().numpy(), 'cxywh').scale(inp_size)
+
+        letterbox = harn.datasets['train'].letterbox
+        img = letterbox._img_letterbox_invert(hwc01, orig_size, target_size)
+        img = np.clip(img, 0, 1)
+        true_cxywh_ = letterbox._boxes_letterbox_invert(true_boxes_, orig_size, target_size)
+        pred_cxywh_ = letterbox._boxes_letterbox_invert(pred_boxes_, orig_size, target_size)
+
+        from netharn.util import mplutil
+        shift, scale, embed_size = letterbox._letterbox_transform(orig_size, target_size)
+
+        mplutil.figure(doclf=True, fnum=1)
+        mplutil.imshow(img, colorspace='rgb')
+        mplutil.draw_boxes(true_cxywh_.data, color='green', box_format='cxywh', labels=true_labels)
+        mplutil.draw_boxes(pred_cxywh_.data, color='blue', box_format='cxywh', labels=pred_labels)
+
+        # mplutil.show_if_requested()
+
+    def deploy(harn):
+        """
+        Experimental function that will deploy a standalone predictor
+        """
+        pass
 
 
-def setup_harness():
+def load_coco_datasets():
+    import glob
+    import wrangle
+    # annot_globstr = ub.truepath('~/data/viame-challenge-2018/phase0-annotations/*.json')
+    annot_globstr = ub.truepath('~/data/viame-challenge-2018/phase0-annotations/mouss_seq0.mscoco.json')
+    img_root = ub.truepath('~/data/viame-challenge-2018/phase0-imagery')
+
+    fpaths = list(glob.glob(annot_globstr))
+    print('fpaths = {!r}'.format(fpaths))
+
+    print('Reading raw mscoco files')
+    import os
+    dsets = []
+    for fpath in sorted(fpaths):
+        if 'nwfsc' in fpath or 'afsc' in fpath:
+            continue
+        print('reading fpath = {!r}'.format(fpath))
+        dset = coco_api.CocoDataset(fpath, tag='', img_root=img_root)
+        try:
+            assert not dset.missing_images()
+        except AssertionError:
+            hack = os.path.basename(fpath).split('-')[0].split('.')[0]
+            dset = coco_api.CocoDataset(fpath, tag=hack, img_root=join(img_root, hack))
+            assert not dset.missing_images(), ub.repr2(dset.missing_images()) + 'MISSING'
+        print(ub.repr2(dset.basic_stats()))
+        dsets.append(dset)
+
+    print('Merging')
+    merged = coco_api.CocoDataset.union(*dsets)
+    merged.img_root = img_root
+
+    # for gid, img in merged.imgs.items():
+    #     if '201503.20150519.123438498.205475' in img['file_name'] :
+    #         for aid in merged.gid_to_aids[gid]:
+    #             print(ub.repr2(merged.anns[aid]))
+    #         break
+
+    # HACK: wont need to do this for the released challenge data
+    # probably wont hurt though
+    merged._remove_keypoint_annotations()
+    merged._run_fixes()
+
+    train_dset, vali_dset = wrangle.make_test_train(merged)
+    train_dset._build_index()
+    vali_dset._build_index()
+
+    coco_dsets = {
+        'train': train_dset,
+        'vali': vali_dset,
+    }
+
+    # for gid, img in coco_dsets['train'].imgs.items():
+    #     if '201503.20150519.123438498.205475' in img['file_name'] :
+    #         for aid in merged.gid_to_aids[gid]:
+    #             print(ub.repr2(merged.anns[aid]))
+    #         break
+    return coco_dsets
+
+
+def setup_harness(bsize=16, workers=0):
     """
     CommandLine:
-        python ~/code/baseline-viame-2018/yolo_viame.py setup_harness
-        python ~/code/baseline-viame-2018/yolo_viame.py setup_harness --profile
+        python ~/code/netharn/netharn/examples/yolo_voc.py setup_harness
 
     Example:
         >>> harn = setup_harness()
         >>> harn.initialize()
-        >>> harn.dry = True
-        >>> harn.run()
     """
-    if int(ub.argval('--phase', default=1)) == 1:
-        cfg = DataConfig.phase1()
-    else:
-        assert False
-        cfg = DataConfig.phase0()
 
-    workdir = cfg.workdir
+    xpu = nh.XPU.cast('argv')
+
+    nice = ub.argval('--nice', default='Yolo2Baseline')
+    batch_size = int(ub.argval('--batch_size', default=bsize))
+    bstep = int(ub.argval('--bstep', 1))
+    workers = int(ub.argval('--workers', default=workers))
+    decay = float(ub.argval('--decay', default=0.0005))
+    lr = float(ub.argval('--lr', default=0.001))
+    workdir = ub.argval('--workdir', default=ub.truepath('~/work/viame/yolo'))
+    ovthresh = 0.5
+
+    coco_dsets = load_coco_datasets()
+
     datasets = {
-        'train': YoloCocoDataset(cfg.train_fpath, cfg.img_root),
-        'vali': YoloCocoDataset(cfg.vali_fapth, cfg.img_root),
+        'train': YoloCocoDataset(coco_dsets['train'], train=True),
+        'vali': YoloCocoDataset(coco_dsets['vali']),
     }
 
     datasets['train'].check_images_exist()
     datasets['vali'].check_images_exist()
-
-    n_cpus = psutil.cpu_count(logical=True)
-    workers = int(n_cpus / 2)
-
-    nice = ub.argval('--nice', default=None)
-
-    pretrained_fpath = darknet.initial_weights()
-
-    # NOTE: XPU implicitly supports DataParallel just pass --gpu=0,1,2,3
-    xpu = xpu_device.XPU.cast('argv')
-
-    ensure_ulimit()
-
-    postproc_params = dict(
-        conf_thresh=0.001,
-        nms_thresh=0.5,
-        ovthresh=0.5,
-    )
-
-    max_epoch = 160
-
-    lr_step_points = {
-        # warmup learning rate
-        0:  0.0001,
-        1:  0.0001,
-        2:  0.0002,
-        3:  0.0003,
-        4:  0.0004,
-        5:  0.0005,
-        6:  0.0006,
-        7:  0.0007,
-        8:  0.0008,
-        9:  0.0009,
-        10: 0.0010,
-        # cooldown learning rate
-        60: 0.0001,
-        90: 0.00001,
+    loaders = {
+        key: dset.make_loader(batch_size=batch_size, num_workers=workers,
+                              shuffle=(key == 'train'), pin_memory=True)
+        for key, dset in datasets.items()
     }
 
-    batch_size = int(ub.argval('--batch_size', default=16))
-    workers = int(ub.argval('--workers',
-                            default=int(psutil.cpu_count(logical=True) / 2)))
+    # simulated_bsize = bstep * batch_size
+    hyper = nh.HyperParams(**{
+        'nice': nice,
+        'workdir': workdir,
+        'datasets': datasets,
 
-    loaders = make_loaders(datasets, batch_size=batch_size,
-                           workers=workers if workers is not None else workers)
+        'xpu': xpu,
 
-    hyper = hyperparams.HyperParams(
+        # a single dict is applied to all datset loaders
+        'loaders': loaders,
 
-        model=(darknet.Darknet19, {
+        'model': (light_yolo.Yolo, {
             'num_classes': datasets['train'].num_classes,
-            'anchors': datasets['train'].anchors
+            'anchors': datasets['train'].anchors,
+            'conf_thresh': 0.001,
+            'nms_thresh': 0.5,
         }),
 
-        criterion=(darknet_loss.DarknetLoss, {
+        'criterion': (light_region_loss.RegionLoss, {
+            'num_classes': datasets['train'].num_classes,
             'anchors': datasets['train'].anchors,
             'object_scale': 5.0,
             'noobject_scale': 1.0,
             'class_scale': 1.0,
             'coord_scale': 1.0,
-            'iou_thresh': 0.6,
-            'reproduce_longcw': ub.argflag('--longcw'),
-            'denom': ub.argval('--denom', default='num_boxes'),
+            'thresh': 0.6,  # iou_thresh
         }),
 
-        optimizer=(torch.optim.SGD, dict(
-            lr=lr_step_points[0],
-            momentum=0.9,
-            weight_decay=0.0005
-        )),
-
-        # initializer=(nninit.KaimingNormal, {}),
-        initializer=(nninit.Pretrained, {
-            'fpath': pretrained_fpath,
+        'initializer': (nh.initializers.Pretrained, {
+            'fpath': light_yolo.initial_imagenet_weights(),
         }),
 
-        scheduler=(ListedLR, dict(
-            step_points=lr_step_points
-        )),
+        'optimizer': (torch.optim.SGD, {
+            'lr': lr / 10,
+            'momentum': 0.9,
+            'weight_decay': decay,
+        }),
 
-        other=ub.dict_union({
-            'nice': str(nice),
-            'batch_size': loaders['train'].batch_sampler.batch_size,
-        }, postproc_params),
-        centering=None,
+        'scheduler': (nh.schedulers.ListedLR, {
+            'points': {
+                0:  lr / 10,
+                1:  lr,
+                59: lr * 1.1,
+                60: lr / 10,
+                90: lr / 100,
+            },
+            'interpolate': True
+        }),
 
-        # centering=datasets['train'].centering,
-        augment=datasets['train'].augmenter,
-    )
+        'monitor': (nh.Monitor, {
+            'minimize': ['loss'],
+            'maximize': ['mAP'],
+            'patience': 160,
+            'max_epoch': 160,
+        }),
 
-    harn = fit_harness.FitHarness(
-        hyper=hyper, xpu=xpu, loaders=loaders, max_iter=max_epoch,
-        workdir=workdir,
-    )
-    harn.postproc_params = postproc_params
-    harn.nice = nice
-    harn.monitor = monitor.Monitor(min_keys=['loss'],
-                                   # max_keys=['global_acc', 'class_acc'],
-                                   patience=max_epoch)
+        'augment': datasets['train'].augmenter,
 
-    @harn.set_batch_runner
-    def batch_runner(harn, inputs, labels):
-        """
-        Custom function to compute the output of a batch and its loss.
+        'dynamics': {
+            # Controls how many batches to process before taking a step in the
+            # gradient direction. Effectively simulates a batch_size that is
+            # `bstep` times bigger.
+            'batch_step': bstep,
+        },
 
-        Example:
-            >>> harn = setup_harness(workers=0)
-            >>> harn.initialize()
-            >>> batch = harn._demo_batch(0, 'train')
-            >>> inputs, labels = batch
-            >>> criterion = harn.criterion
-            >>> weights_fpath = darknet.demo_weights()
-            >>> state_dict = torch.load(weights_fpath)['model_state_dict']
-            >>> harn.model.module.load_state_dict(state_dict)
-            >>> outputs, loss = harn._custom_run_batch(harn, inputs, labels)
-        """
-        outputs = harn.model(*inputs)
-
-        # darknet criterion needs to know the input image shape
-        inp_size = tuple(inputs[0].shape[-2:])
-
-        aoff_pred, iou_pred, prob_pred = outputs
-        gt_boxes, gt_classes, orig_size, indices, gt_weights = labels
-
-        loss = harn.criterion(aoff_pred, iou_pred, prob_pred, gt_boxes,
-                              gt_classes, gt_weights=gt_weights,
-                              inp_size=inp_size, epoch=harn.epoch)
-        return outputs, loss
-
-    @harn.add_batch_metric_hook
-    def custom_metrics(harn, output, labels):
-        metrics_dict = ub.odict()
-        criterion = harn.criterion
-        metrics_dict['L_bbox'] = float(criterion.bbox_loss.data.cpu().numpy())
-        metrics_dict['L_iou'] = float(criterion.iou_loss.data.cpu().numpy())
-        metrics_dict['L_cls'] = float(criterion.cls_loss.data.cpu().numpy())
-        return metrics_dict
-
-    # Set as a harness attribute instead of using a closure
-    harn.batch_confusions = []
-
-    @harn.add_iter_callback
-    def on_batch(harn, tag, loader, bx, inputs, labels, outputs, loss):
-        """
-        Custom hook to run on each batch (used to compute mAP on the fly)
-
-        Example:
-            >>> harn = setup_harness(workers=0)
-            >>> harn.initialize()
-            >>> batch = harn._demo_batch(0, 'train')
-            >>> inputs, labels = batch
-            >>> criterion = harn.criterion
-            >>> loader = harn.loaders['train']
-            >>> weights_fpath = darknet.demo_weights()
-            >>> state_dict = torch.load(weights_fpath)['model_state_dict']
-            >>> harn.model.module.load_state_dict(state_dict)
-            >>> outputs, loss = harn._custom_run_batch(harn, inputs, labels)
-            >>> tag = 'train'
-            >>> on_batch(harn, tag, loader, bx, inputs, labels, outputs, loss)
-        """
-        # Accumulate relevant outputs to measure
-        gt_boxes, gt_classes, orig_size, indices, gt_weights = labels
-        # aoff_pred, iou_pred, prob_pred = outputs
-        im_sizes = orig_size
-        inp_size = inputs[0].shape[-2:][::-1]
-
-        conf_thresh = harn.postproc_params['conf_thresh']
-        nms_thresh = harn.postproc_params['nms_thresh']
-        ovthresh = harn.postproc_params['ovthresh']
-
-        postout = harn.model.module.postprocess(outputs, inp_size, im_sizes,
-                                                conf_thresh, nms_thresh)
-        # batch_pred_boxes, batch_pred_scores, batch_pred_cls_inds = postout
-        # Compute: y_pred, y_true, and y_score for this batch
-        batch_pred_boxes, batch_pred_scores, batch_pred_cls_inds = postout
-        batch_true_boxes, batch_true_cls_inds = labels[0:2]
-        batch_orig_sz, batch_img_inds = labels[2:4]
-
-        y_batch = []
-        for bx, index in enumerate(batch_img_inds.data.cpu().numpy().ravel()):
-            pred_boxes  = batch_pred_boxes[bx]
-            pred_scores = batch_pred_scores[bx]
-            pred_cxs    = batch_pred_cls_inds[bx]
-
-            # Group groundtruth boxes by class
-            true_boxes_ = batch_true_boxes[bx].data.cpu().numpy()
-            true_cxs = batch_true_cls_inds[bx].data.cpu().numpy()
-            true_weights = gt_weights[bx].data.cpu().numpy()
-
-            # Unnormalize the true bboxes back to orig coords
-            orig_size = batch_orig_sz[bx]
-            sx, sy = np.array(orig_size) / np.array(inp_size)
-            if len(true_boxes_):
-                true_boxes = np.hstack([true_boxes_, true_weights[:, None]])
-                true_boxes[:, 0:4:2] *= sx
-                true_boxes[:, 1:4:2] *= sy
-            else:
-                true_boxes = true_boxes_.reshape(-1, 4)
-
-            y = voc.EvaluateVOC.image_confusions(true_boxes, true_cxs,
-                                                 pred_boxes, pred_scores,
-                                                 pred_cxs, ovthresh=ovthresh)
-            y['gx'] = index
-            y_batch.append(y)
-
-        harn.batch_confusions.extend(y_batch)
-
-    @harn.add_epoch_callback
-    def on_epoch(harn, tag, loader):
-        y = pd.concat(harn.batch_confusions)
-        num_classes = len(loader.dataset.label_names)
-
-        mean_ap, ap_list = voc.EvaluateVOC.compute_map(y, num_classes)
-
-        harn.log_value(tag + ' epoch mAP', mean_ap, harn.epoch)
-        max_ap = np.nanmax(ap_list)
-        harn.log_value(tag + ' epoch max-AP', max_ap, harn.epoch)
-        harn.batch_confusions.clear()
-
+        'other': {
+            # Other params are not used internally, so you are free to set any
+            # extra params specific to your algorithm, and still have them
+            # logged in the hyperparam structure. For YOLO this is `ovthresh`.
+            'batch_size': batch_size,
+            'nice': nice,
+            'ovthresh': ovthresh,  # used in mAP computation
+            'input_range': 'norm01',
+        },
+    })
+    harn = YoloHarn(hyper=hyper)
+    harn.config['use_tqdm'] = False
+    harn.intervals['log_iter_train'] = 1
+    harn.intervals['log_iter_test'] = None
+    harn.intervals['log_iter_vali'] = None
     return harn
 
 
@@ -791,10 +940,9 @@ def train():
 
 
 if __name__ == '__main__':
-    r"""
+    """
     CommandLine:
-        export PYTHONPATH=$PYTHONPATH:/home/joncrall/code/clab/examples
-        python ~/code/clab/examples/yolo_viame.py
+        python ~/code/baseline-viame-2018/yolo_viame.py all
     """
     import xdoctest
     xdoctest.doctest_module(__file__)

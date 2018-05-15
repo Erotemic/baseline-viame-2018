@@ -232,7 +232,7 @@ class CocoDataset(ub.NiceRepr):
             if cid not in cid_to_gids:
                 cid_to_gids[cid] = set()
 
-        for gid in cats.keys():
+        for gid in imgs.keys():
             if gid not in gid_to_aids:
                 gid_to_aids[gid] = set()
 
@@ -356,6 +356,14 @@ class CocoDataset(ub.NiceRepr):
         Example:
             >>> dataset = demo_coco_data()
             >>> self = CocoDataset(dataset, tag='demo')
+            >>> sub_gids = [1, 3]
+            >>> sub_dset = self.subset(sub_gids)
+            >>> assert len(self.gid_to_aids) == 3
+            >>> assert len(sub_dset.gid_to_aids) == 2
+
+        Example:
+            >>> dataset = demo_coco_data()
+            >>> self = CocoDataset(dataset, tag='demo')
             >>> sub1 = self.subset([1])
             >>> sub2 = self.subset([2])
             >>> sub3 = self.subset([3])
@@ -371,10 +379,12 @@ class CocoDataset(ub.NiceRepr):
         new_dataset['info'] = self.dataset['info']
         new_dataset['licenses'] = self.dataset['licenses']
 
+        sub_gids = sorted(set(sub_gids))
         sub_aids = sorted([aid for gid in sub_gids
                            for aid in self.gid_to_aids.get(gid, [])])
         new_dataset['annotations'] = list(ub.take(self.anns, sub_aids))
         new_dataset['images'] = list(ub.take(self.imgs, sub_gids))
+
         sub_dset = CocoDataset(new_dataset, img_root=self.img_root)
         return sub_dset
 
@@ -543,6 +553,30 @@ class CocoDataset(ub.NiceRepr):
             ('n_anns', len(self.dataset['annotations'])),
             ('n_imgs', len(self.dataset['images'])),
             ('n_cats', len(self.dataset['categories'])),
+        ])
+
+    def extended_stats(self):
+        """
+        Reports number of images, annotations, and categories.
+
+        Example:
+            >>> dataset = demo_coco_data()
+            >>> self = CocoDataset(dataset, tag='demo')
+            >>> print(ub.repr2(self.basic_stats()))
+            {
+                'n_anns': 11,
+                'n_imgs': 3,
+                'n_cats': 7,
+            }
+        """
+        import netharn as nh
+        def mapping_stats(xid_to_yids):
+            return nh.util.stats_dict(
+                list(ub.map_vals(len, xid_to_yids).values()))
+        return ub.odict([
+            ('annots_per_img', mapping_stats(self.gid_to_aids)),
+            ('cats_per_img', mapping_stats(self.cid_to_gids)),
+            ('cats_per_annot', mapping_stats(self.cid_to_aids)),
         ])
 
     def rename_categories(self, mapper):
