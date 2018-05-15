@@ -187,6 +187,9 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
 
     def __len__(self):
         # return 800
+        limit = ub.argval('--limit', default=None)
+        if limit:
+            return int(limit)
         return self.num_images
 
     def __getitem__(self, index):
@@ -508,11 +511,7 @@ class YoloCocoDataset(TorchCocoDataset):
             if True:
                 # If the data is not balanced we need to balance it
                 index_to_weight = self._training_sample_weights()
-                limit = ub.argval('--limit', default=None)
-                if limit:
-                    num_samples = int(limit)
-                else:
-                    num_samples = len(self)
+                num_samples = len(self)
                 index_to_weight = index_to_weight[:num_samples]
                 sampler = torch_sampler.WeightedRandomSampler(index_to_weight,
                                                               num_samples,
@@ -1130,7 +1129,7 @@ def train():
 
     srun -c 4 -p community --gres=gpu:1 \
             python ~/code/baseline-viame-2018/yolo_viame.py train \
-            --nice dummy --batch_size=16 --limit=400 --workers=0 --gpu=0 --lr=0.000001
+            --nice dummy --batch_size=16 --limit=128 --workers=0 --gpu=0 --lr=0.000001
 
     """
     harn = setup_harness()
