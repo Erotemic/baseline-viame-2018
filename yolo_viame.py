@@ -190,7 +190,6 @@ class TorchCocoDataset(torch_data.Dataset, ub.NiceRepr):
             cind = self._class_to_ind[cname]
             gt_labels.append(cind)
             boxes.append(tlbr.data)
-            aids.append(aid)
 
         annot = {
             'boxes': np.array(boxes, dtype=np.float32).reshape(-1, 4),
@@ -264,7 +263,7 @@ class YoloCocoDataset(TorchCocoDataset):
         Ignore:
             >>> harn = setup_harness()
             >>> self = harn.hyper.make_loaders()['train'].dataset
-            >>> index = 3
+            >>> index = 10
             >>> chw01, label = self[index]
             >>> hwc01 = chw01.numpy().transpose(1, 2, 0)
             >>> print(hwc01.shape)
@@ -384,9 +383,10 @@ class YoloCocoDataset(TorchCocoDataset):
         """
         Example:
             >>> torch.random.manual_seed(0)
-            >>> datasets = {'train': YoloCocoDataset()}
-            >>> loaders = make_loaders(datasets)
-            >>> train_iter = iter(loaders['train'])
+            >>> dset = coco_api.CocoDataset(coco_api.demo_coco_data())
+            >>> self = YoloCocoDataset(dset, train=1)
+            >>> loader = self.make_loader(batch_size=1)
+            >>> train_iter = iter(loader)
             >>> # training batches should have multiple shapes
             >>> shapes = set()
             >>> for batch in train_iter:
@@ -403,11 +403,20 @@ class YoloCocoDataset(TorchCocoDataset):
             >>>     shapes.add(batch[0].shape[-1])
             >>> assert len(shapes) == 1
         """
+        import torch.utils.data.sampler as torch_sampler
         assert len(self) > 0, 'must have some data'
+        if shuffle:
+            sampler = torch_sampler.RandomSampler(self)
+            resample_freq = 10
+        else:
+            sampler = torch_sampler.SequentialSampler(self)
+            resample_freq = None
+
         # use custom sampler that does multiscale training
         batch_sampler = multiscale_batch_sampler.MultiScaleBatchSampler(
-            self, batch_size=batch_size, shuffle=shuffle
+            sampler, batch_size=batch_size, resample_freq=resample_freq,
         )
+        # torch.utils.data.sampler.WeightedRandomSampler
         loader = torch_data.DataLoader(self, batch_sampler=batch_sampler,
                                        collate_fn=nh.data.collate.padded_collate,
                                        num_workers=num_workers,
@@ -499,6 +508,17 @@ class YoloHarn(nh.FitHarn):
 
             for y in harn._measure_confusion(postout, labels, inp_size):
                 harn.batch_confusions.append(y)
+
+            # Visualize a random prediction each epoch
+            if harn.bxs[harn.current_tag] == 0:
+                fig = nh.util.mplutil.figure(fnum=1)
+                harn.visualize_prediction(batch, outputs, postout, idx=0,
+                                          thresh=0.2)
+                img = nh.util.mplutil.render_figure_to_image(fig)
+                dump_dpath = ub.ensuredir((harn.train_dpath, 'dump'))
+                dump_fname = 'pred_{:08d}.png'.format(harn.epoch)
+                fpath = os.path.join(dump_dpath, dump_fname)
+                nh.util.imwrite(fpath, img)
 
         metrics_dict = ub.odict()
         metrics_dict['L_bbox'] = float(harn.criterion.loss_coord)
@@ -681,7 +701,8 @@ class YoloHarn(nh.FitHarn):
                 truth.append(true)
         return predictions, truth
 
-    def visualize_prediction(harn, batch, outputs, postout, idx=0, thresh=None):
+    def visualize_prediction(harn, batch, outputs, postout, idx=0,
+                             thresh=None):
         """
         Returns:
             np.ndarray: numpy image
@@ -753,8 +774,11 @@ def load_coco_datasets():
     import glob
     import wrangle
     # annot_globstr = ub.truepath('~/data/viame-challenge-2018/phase0-annotations/*.json')
-    annot_globstr = ub.truepath('~/data/viame-challenge-2018/phase0-annotations/mouss_seq0.mscoco.json')
+    annot_globstr = ub.truepath('~/data/viame-challenge-2018/phase0-annotations/mbari_seq0.mscoco.json')
     img_root = ub.truepath('~/data/viame-challenge-2018/phase0-imagery')
+
+    # annot_globstr = ub.truepath('~/data/viame-challenge-2018/phase0-annotations/mouss_seq0.mscoco.json')
+    # img_root = ub.truepath('~/data/viame-challenge-2018/phase0-imagery')
 
     fpaths = list(glob.glob(annot_globstr))
     print('fpaths = {!r}'.format(fpaths))
@@ -791,9 +815,9 @@ def load_coco_datasets():
     merged._remove_keypoint_annotations()
     merged._run_fixes()
 
-    train_dset, vali_dset = wrangle.make_test_train(merged)
-    train_dset._build_index()
-    vali_dset._build_index()
+    train_dset, vali_dset = wrangle.make_train_vali(merged)
+    # train_dset._build_index()
+    # vali_dset._build_index()
 
     coco_dsets = {
         'train': train_dset,
@@ -825,7 +849,7 @@ def setup_harness(bsize=16, workers=0):
     bstep = int(ub.argval('--bstep', 1))
     workers = int(ub.argval('--workers', default=workers))
     decay = float(ub.argval('--decay', default=0.0005))
-    lr = float(ub.argval('--lr', default=0.001))
+    lr = float(ub.argval('--lr', default=0.0001))
     workdir = ub.argval('--workdir', default=ub.truepath('~/work/viame/yolo'))
     ovthresh = 0.5
 
@@ -929,14 +953,15 @@ def setup_harness(bsize=16, workers=0):
 
 def train():
     """
+    python ~/code/baseline-viame-2018/yolo_viame.py train --nice dummy --batch_size=4 --workers=0 --gpu=0
+
     python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase0_b16 --phase=0 --batch_size=16 --workers=2 --gpu=0
     python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase1_b16 --phase=1 --batch_size=16 --workers=2 --gpu=0
 
     python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase1_b32 --phase=1 --batch_size=32 --workers=4 --gpu=2,3
     """
     harn = setup_harness()
-    with harn.xpu:
-        harn.run()
+    harn.run()
 
 
 if __name__ == '__main__':

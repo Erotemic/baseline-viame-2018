@@ -141,7 +141,7 @@ def setup_data():
     return fine, coarse, fine_bbox, coarse_bbox
 
 
-def make_test_train(merged):
+def make_train_vali(merged):
     # Split into train / test  set
     print('Splitting')
     import numpy as np
@@ -202,13 +202,15 @@ def make_test_train(merged):
     test_gids.update(gids_maybe[1::2])
 
     train_dset = merged.subset(sorted(train_gids))
-    test_dset = merged.subset(sorted(test_gids))
+    vali_dset = merged.subset(sorted(test_gids))
 
     print('--- Training Stats ---')
     print(ub.repr2(train_dset.basic_stats()))
-    print('--- Testing Stats ---')
-    print(ub.repr2(test_dset.basic_stats()))
-    return train_dset, test_dset
+    print(ub.repr2(train_dset.extended_stats(), nl=1))
+    print('--- Validation Stats ---')
+    print(ub.repr2(vali_dset.basic_stats()))
+    print(ub.repr2(vali_dset.extended_stats(), nl=1))
+    return train_dset, vali_dset
 
 
 def setup_yolo(cfg=None):
@@ -256,14 +258,14 @@ def setup_yolo(cfg=None):
 
     # suffix = 'coarse-bbox-only'
     # prefix = 'phase{}'.format(cfg.phase)
-    train_dset, test_dset = make_test_train(merged)
+    train_dset, vali_dset = make_train_vali(merged)
 
     assert not train_dset.missing_images(), ub.repr2(train_dset.missing_images())
-    assert not test_dset.missing_images(), ub.repr2(train_dset.missing_images())
+    assert not vali_dset.missing_images(), ub.repr2(train_dset.missing_images())
 
     if 1:
         print(ub.repr2(train_dset.category_annotation_type_frequency(), nl=1, sk=1))
-        print(ub.repr2(test_dset.category_annotation_type_frequency(), nl=1, sk=1))
+        print(ub.repr2(vali_dset.category_annotation_type_frequency(), nl=1, sk=1))
 
     print('Writing')
     train_fpath = join(cfg.workdir, 'train.mscoco.json')
@@ -272,7 +274,7 @@ def setup_yolo(cfg=None):
     print('test_fpath = {!r}'.format(test_fpath))
 
     train_dset.dump(train_fpath)
-    test_dset.dump(test_fpath)
+    vali_dset.dump(test_fpath)
 
 
 if __name__ == '__main__':
