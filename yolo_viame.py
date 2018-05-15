@@ -368,7 +368,8 @@ class YoloCocoDataset(TorchCocoDataset):
         Ignore:
             >>> harn = setup_harness()
             >>> self = harn.hyper.make_loaders()['train'].dataset
-            >>> index = 11
+            >>> weights = self._training_sample_weights()
+            >>> index = ub.argsort(weights)[-1000]
             >>> chw01, label = self[index]
             >>> hwc01 = chw01.numpy().transpose(1, 2, 0)
             >>> print(hwc01.shape)
@@ -517,7 +518,7 @@ class YoloCocoDataset(TorchCocoDataset):
                 sampler = torch_sampler.WeightedRandomSampler(index_to_weight,
                                                               num_samples=len(index_to_weight),
                                                               replacement=True)
-                sampler.data_source = self
+                sampler.data_source = self  # hack for use with multiscale
             else:
                 sampler = torch_sampler.RandomSampler(self)
             resample_freq = 10
