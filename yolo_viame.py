@@ -14,7 +14,6 @@ Ignore:
 
 """
 import os
-from os.path import join
 import glob
 import torch
 import cv2
@@ -25,6 +24,7 @@ import imgaug.augmenters as iaa
 import torch.utils.data as torch_data
 import torch.utils.data.sampler as torch_sampler
 import netharn as nh
+from os.path import join
 from netharn.models.yolo2 import multiscale_batch_sampler
 from netharn.models.yolo2 import light_region_loss
 from netharn.models.yolo2 import light_yolo
