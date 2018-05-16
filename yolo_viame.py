@@ -820,13 +820,13 @@ class YoloHarn(nh.FitHarn):
         inputs, labels = batch
         targets, gt_weights, orig_sizes, indices, bg_weights = labels
         chw01 = inputs[idx]
-        target = targets[idx]
-        postitem = postout[idx]
+        target = targets[idx].cpu().numpy().reshape(-1, 5)
+        postitem = postout[idx].cpu().numpy().reshape(-1, 6)
         orig_size = orig_sizes[idx].cpu().numpy()
         # ---
         hwc01 = chw01.cpu().numpy().transpose(1, 2, 0)
         # TRUE
-        true_cxs = target[:, 0].long()
+        true_cxs = target[:, 0].astype(np.int)
         true_cxywh = target[:, 1:5]
         flags = true_cxs != -1
         true_cxywh = true_cxywh[flags]
@@ -834,7 +834,7 @@ class YoloHarn(nh.FitHarn):
         # PRED
         pred_cxywh = postitem[:, 0:4]
         pred_scores = postitem[:, 4]
-        pred_cxs = postitem[:, 5]
+        pred_cxs = postitem[:, 5].astype(np.int)
 
         if thresh is not None:
             flags = pred_scores > thresh
@@ -842,19 +842,18 @@ class YoloHarn(nh.FitHarn):
             pred_cxywh = pred_cxywh[flags]
             pred_scores = pred_scores[flags]
 
-        pred_clsnms = list(ub.take(harn.datasets['train'].label_names,
-                                   pred_cxs.long().cpu().numpy()))
+        label_names = harn.datasets['train'].label_names
+
+        true_clsnms = list(ub.take(label_names, true_cxs))
+        pred_clsnms = list(ub.take(label_names, pred_cxs))
         pred_labels = ['{}@{:.2f}'.format(n, s)
                        for n, s in zip(pred_clsnms, pred_scores)]
-
-        true_labels = list(ub.take(harn.datasets['train'].label_names,
-                                   true_cxs.long().cpu().numpy()))
         # ---
         inp_size = np.array(hwc01.shape[0:2][::-1])
         target_size = inp_size
 
-        true_boxes_ = nh.util.Boxes(true_cxywh.cpu().numpy(), 'cxywh').scale(inp_size)
-        pred_boxes_ = nh.util.Boxes(pred_cxywh.cpu().numpy(), 'cxywh').scale(inp_size)
+        true_boxes_ = nh.util.Boxes(true_cxywh, 'cxywh').scale(inp_size)
+        pred_boxes_ = nh.util.Boxes(pred_cxywh, 'cxywh').scale(inp_size)
 
         letterbox = harn.datasets['train'].letterbox
         img = letterbox._img_letterbox_invert(hwc01, orig_size, target_size)
@@ -872,7 +871,7 @@ class YoloHarn(nh.FitHarn):
 
         fig = mplutil.figure(doclf=True, fnum=1)
         mplutil.imshow(img, colorspace='rgb')
-        mplutil.draw_boxes(true_cxywh_.data, color='green', box_format='cxywh', labels=true_labels)
+        mplutil.draw_boxes(true_cxywh_.data, color='green', box_format='cxywh', labels=true_clsnms)
         mplutil.draw_boxes(pred_cxywh_.data, color='blue', box_format='cxywh', labels=pred_labels)
         return fig
 
@@ -1136,6 +1135,10 @@ def train():
     srun -c 4 -p community --gres=gpu:1 \
             python ~/code/baseline-viame-2018/yolo_viame.py train \
             --nice dummy --batch_size=16 --limit=128 --workers=0 --gpu=0 --lr=0.000001
+
+    srun -c 4 -p community --gres=gpu:1 \
+            python ~/code/baseline-viame-2018/yolo_viame.py train \
+            --nice baseline1 --batch_size=16 --workers=0 --gpu=0
 
     """
     harn = setup_harness()
