@@ -462,6 +462,14 @@ class YoloCocoDataset(TorchCocoDataset):
         bg_weight = torch.FloatTensor([1.0])
         label = (target, gt_weights, orig_size, index, bg_weight)
 
+        label = {
+            'targets': target,
+            'gt_weights': gt_weights,
+            'orig_sizes': orig_size,
+            'indices': index,
+            'bg_weights': bg_weight
+        }
+
         return chw01, label
 
     def _load_item(self, index):
@@ -584,10 +592,10 @@ class YoloHarn(nh.FitHarn):
 
         inputs, labels = batch
         outputs = harn.model(inputs)
-        # torch.cuda.synchronize()
-        target, gt_weights, orig_sizes, indices, bg_weights = labels
-        loss = harn.criterion(outputs, target, seen=n_seen)
-        # torch.cuda.synchronize()
+        target = labels['targets']
+        gt_weights = labels['gt_weights']
+        loss = harn.criterion(outputs, target, seen=n_seen,
+                              gt_weights=gt_weights)
         return outputs, loss
 
     def on_batch(harn, batch, outputs, loss):
@@ -619,9 +627,9 @@ class YoloHarn(nh.FitHarn):
             try:
                 postout = harn.model.module.postprocess(outputs)
             except Exception as ex:
-                print('\n\n\n')
-                print('ERROR: FAILED TO POSTPROCESS OUTPUTS')
-                print('DETAILS: {!r}'.format(ex))
+                harn.log('\n\n\n')
+                harn.log('ERROR: FAILED TO POSTPROCESS OUTPUTS')
+                harn.log('DETAILS: {!r}'.format(ex))
                 raise
 
             for y in harn._measure_confusion(postout, labels, inp_size):
@@ -679,16 +687,16 @@ class YoloHarn(nh.FitHarn):
     # Non-standard problem-specific custom methods
 
     def _measure_confusion(harn, postout, labels, inp_size, **kw):
-        targets = labels[0]
-        gt_weights = labels[1]
-        # orig_sizes = labels[2]
-        # indices = labels[3]
-        bg_weights = labels[4]
+        targets = labels['targets']
+        gt_weights = labels['gt_weights']
+        # orig_sizes = labels['orig_sizes']
+        # indices = labels['indices']
+        bg_weights = labels['bg_weights']
 
         def asnumpy(tensor):
             return tensor.data.cpu().numpy()
 
-        bsize = len(labels[0])
+        bsize = len(targets)
         for bx in range(bsize):
             postitem = asnumpy(postout[bx])
             target = asnumpy(targets[bx]).reshape(-1, 5)
@@ -745,11 +753,11 @@ class YoloHarn(nh.FitHarn):
         -[ ] TODO: dump predictions for the test set to disk and score using
              someone elses code.
         """
-        targets = labels[0]
-        gt_weights = labels[1]
-        orig_sizes = labels[2]
-        indices = labels[3]
-        # bg_weights = labels[4]
+        targets = labels['targets']
+        gt_weights = labels['gt_weights']
+        indices = labels['indices']
+        orig_sizes = labels['orig_sizes']
+        # bg_weights = labels['bg_weights']
 
         def asnumpy(tensor):
             return tensor.data.cpu().numpy()
@@ -762,7 +770,7 @@ class YoloHarn(nh.FitHarn):
         predictions = []
         truth = []
 
-        bsize = len(labels[0])
+        bsize = len(targets)
         for bx in range(bsize):
             postitem = asnumpy(postout[bx])
             target = asnumpy(targets[bx]).reshape(-1, 5)
@@ -818,7 +826,14 @@ class YoloHarn(nh.FitHarn):
         """
         # xdoc: +REQUIRES(--show)
         inputs, labels = batch
+
+        targets = labels['targets']
+        gt_weights = labels['gt_weights']
+        orig_sizes = labels['orig_sizes']
+        indices = labels['indices']
+        bg_weights = labels['bg_weights']
         targets, gt_weights, orig_sizes, indices, bg_weights = labels
+
         chw01 = inputs[idx]
         target = targets[idx].cpu().numpy().reshape(-1, 5)
         postitem = postout[idx].cpu().numpy().reshape(-1, 6)
@@ -905,13 +920,14 @@ class YoloHarn(nh.FitHarn):
         """
         Dump a visualization of the validation images to disk
         """
-        print('DUMP CHOSEN INDICES')
+        harn.log('DUMP CHOSEN INDICES')
 
         if not hasattr(harn, 'chosen_indices'):
             harn._pick_dumpcats()
 
         vali_dset = harn.loaders['vali'].dataset
         for indices in ub.chunks(harn.chosen_indices, 16):
+            harn.log('PREDICTING CHUNK')
             to_collate = [vali_dset[index] for index in indices]
             raw_batch = nh.data.collate.padded_collate(to_collate)
             batch = harn.prepare_batch(raw_batch)
@@ -926,6 +942,7 @@ class YoloHarn(nh.FitHarn):
                 dump_dpath = ub.ensuredir((harn.train_dpath, 'dump'))
                 dump_fname = 'pred_{:04d}_{:08d}.png'.format(index, harn.epoch)
                 fpath = os.path.join(dump_dpath, dump_fname)
+                harn.log('dump viz fpath = {}'.format(fpath))
                 nh.util.imwrite(fpath, img)
 
     def dump_batch_item(harn, batch, outputs, postout):
@@ -1128,7 +1145,7 @@ def train():
 
     python ~/code/baseline-viame-2018/yolo_viame.py train --nice phase1_b32 --phase=1 --batch_size=32 --workers=4 --gpu=2,3
 
-    srun -c 4 -p community --gres=gpu:1 \
+    srun -c 4 -p priority --gres=gpu:1 \
             python ~/code/baseline-viame-2018/yolo_viame.py train \
             --nice baseline1 --batch_size=16 --workers=4 --gpu=0
 
