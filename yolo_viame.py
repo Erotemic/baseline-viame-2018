@@ -1167,6 +1167,6 @@ if __name__ == '__main__':
         xdoctest ~/code/baseline-viame-2018/yolo_viame.py all
         python ~/code/baseline-viame-2018/yolo_viame.py all
     """
-    # train()
-    import xdoctest
-    xdoctest.doctest_module(__file__)
+    train()
+    # import xdoctest
+    # xdoctest.doctest_module(__file__)
