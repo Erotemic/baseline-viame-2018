@@ -577,7 +577,7 @@ class YoloHarn(nh.FitHarn):
         Example:
             >>> harn = setup_harness(bsize=2)
             >>> harn.initialize()
-            >>> batch = harn._demo_batch(0, 'test')
+            >>> batch = harn._demo_batch(0, 'vali')
             >>> weights_fpath = light_yolo.demo_voc_weights()
             >>> state_dict = harn.xpu.load(weights_fpath)['weights']
             >>> harn.model.module.load_state_dict(state_dict)
@@ -828,11 +828,10 @@ class YoloHarn(nh.FitHarn):
         inputs, labels = batch
 
         targets = labels['targets']
-        gt_weights = labels['gt_weights']
+        # gt_weights = labels['gt_weights']
         orig_sizes = labels['orig_sizes']
-        indices = labels['indices']
-        bg_weights = labels['bg_weights']
-        targets, gt_weights, orig_sizes, indices, bg_weights = labels
+        # indices = labels['indices']
+        # bg_weights = labels['bg_weights']
 
         chw01 = inputs[idx]
         target = targets[idx].cpu().numpy().reshape(-1, 5)
@@ -928,8 +927,8 @@ class YoloHarn(nh.FitHarn):
         vali_dset = harn.loaders['vali'].dataset
         for indices in ub.chunks(harn.chosen_indices, 16):
             harn.log('PREDICTING CHUNK')
-            to_collate = [vali_dset[index] for index in indices]
-            raw_batch = nh.data.collate.padded_collate(to_collate)
+            inbatch = [vali_dset[index] for index in indices]
+            raw_batch = nh.data.collate.padded_collate(inbatch)
             batch = harn.prepare_batch(raw_batch)
             outputs, loss = harn.run_batch(batch)
             postout = harn.model.module.postprocess(outputs)
@@ -1165,7 +1164,7 @@ def train():
 if __name__ == '__main__':
     """
     CommandLine:
-        python ~/code/baseline-viame-2018/yolo_viame.py all
+        xdoctest ~/code/baseline-viame-2018/yolo_viame.py all
     """
     train()
     # import xdoctest
