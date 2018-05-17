@@ -664,8 +664,10 @@ class YoloHarn(nh.FitHarn):
             >>> harn.on_epoch()
         """
         tag = harn.current_tag
-        if tag == 'vali':
-            harn._dump_chosen_validation_data()
+
+        # if tag == 'vali':
+        #     harn._dump_chosen_validation_data()
+
         if harn.batch_confusions:
             y = pd.concat([pd.DataFrame(y) for y in harn.batch_confusions])
             # TODO: write out a few visualizations
@@ -824,7 +826,7 @@ class YoloHarn(nh.FitHarn):
         Returns:
             np.ndarray: numpy image
         """
-        # xdoc: +REQUIRES(--show)
+        from netharn.util import mplutil
         inputs, labels = batch
 
         targets = labels['targets']
@@ -880,7 +882,6 @@ class YoloHarn(nh.FitHarn):
         true_cxywh_ = letterbox._boxes_letterbox_invert(true_boxes_, orig_size, target_size)
         pred_cxywh_ = letterbox._boxes_letterbox_invert(pred_boxes_, orig_size, target_size)
 
-        from netharn.util import mplutil
         shift, scale, embed_size = letterbox._letterbox_transform(orig_size, target_size)
 
         fig = mplutil.figure(doclf=True, fnum=1)
