@@ -1046,6 +1046,10 @@ def setup_harness(bsize=16, workers=0):
 
     datasets['train'].check_images_exist()
     datasets['vali'].check_images_exist()
+
+    if workers > 0:
+        cv2.setNumThreads(0)
+
     loaders = {
         key: dset.make_loader(batch_size=batch_size, num_workers=workers,
                               shuffle=(key == 'train'), pin_memory=False)
@@ -1129,7 +1133,7 @@ def setup_harness(bsize=16, workers=0):
     })
     harn = YoloHarn(hyper=hyper)
     harn.config['use_tqdm'] = False
-    harn.intervals['log_iter_train'] = 1
+    harn.intervals['log_iter_train'] = None
     harn.intervals['log_iter_test'] = None
     harn.intervals['log_iter_vali'] = None
     return harn
