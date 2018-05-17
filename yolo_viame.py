@@ -665,8 +665,8 @@ class YoloHarn(nh.FitHarn):
         """
         tag = harn.current_tag
 
-        # if tag == 'vali':
-        #     harn._dump_chosen_validation_data()
+        if tag == 'vali':
+            harn._dump_chosen_validation_data()
 
         if harn.batch_confusions:
             y = pd.concat([pd.DataFrame(y) for y in harn.batch_confusions])
