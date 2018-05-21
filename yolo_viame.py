@@ -627,9 +627,9 @@ class YoloHarn(nh.FitHarn):
             try:
                 postout = harn.model.module.postprocess(outputs)
             except Exception as ex:
-                harn.log('\n\n\n')
-                harn.log('ERROR: FAILED TO POSTPROCESS OUTPUTS')
-                harn.log('DETAILS: {!r}'.format(ex))
+                harn.error('\n\n\n')
+                harn.error('ERROR: FAILED TO POSTPROCESS OUTPUTS')
+                harn.error('DETAILS: {!r}'.format(ex))
                 raise
 
             for y in harn._measure_confusion(postout, labels, inp_size):
@@ -920,14 +920,14 @@ class YoloHarn(nh.FitHarn):
         """
         Dump a visualization of the validation images to disk
         """
-        harn.log('DUMP CHOSEN INDICES')
+        harn.debug('DUMP CHOSEN INDICES')
 
         if not hasattr(harn, 'chosen_indices'):
             harn._pick_dumpcats()
 
         vali_dset = harn.loaders['vali'].dataset
         for indices in ub.chunks(harn.chosen_indices, 16):
-            harn.log('PREDICTING CHUNK')
+            harn.debug('PREDICTING CHUNK')
             inbatch = [vali_dset[index] for index in indices]
             raw_batch = nh.data.collate.padded_collate(inbatch)
             batch = harn.prepare_batch(raw_batch)
@@ -942,7 +942,7 @@ class YoloHarn(nh.FitHarn):
                 dump_dpath = ub.ensuredir((harn.train_dpath, 'dump'))
                 dump_fname = 'pred_{:04d}_{:08d}.png'.format(index, harn.epoch)
                 fpath = os.path.join(dump_dpath, dump_fname)
-                harn.log('dump viz fpath = {}'.format(fpath))
+                harn.debug('dump viz fpath = {}'.format(fpath))
                 nh.util.imwrite(fpath, img)
 
     def dump_batch_item(harn, batch, outputs, postout):
@@ -1017,7 +1017,7 @@ def load_coco_datasets():
     return coco_dsets
 
 
-def setup_harness(bsize=16, workers=0):
+def setup_harness(bsize=16, workers=0, **kw):
     """
     CommandLine:
         python ~/code/netharn/netharn/examples/yolo_voc.py setup_harness
@@ -1029,13 +1029,16 @@ def setup_harness(bsize=16, workers=0):
 
     xpu = nh.XPU.cast('argv')
 
-    nice = ub.argval('--nice', default='Yolo2Baseline')
-    batch_size = int(ub.argval('--batch_size', default=bsize))
-    bstep = int(ub.argval('--bstep', 1))
-    workers = int(ub.argval('--workers', default=workers))
-    decay = float(ub.argval('--decay', default=0.0005))
-    lr = float(ub.argval('--lr', default=0.001))
-    workdir = ub.argval('--workdir', default=ub.truepath('~/work/viame/yolo'))
+    def _argval(arg, default):
+        return ub.argval(arg, kw.get(arg.lstrip('-'), default))
+
+    nice = _argval('--nice', default='Yolo2Baseline')
+    batch_size = int(_argval('--batch_size', default=bsize))
+    bstep = int(_argval('--bstep', 1))
+    workers = int(_argval('--workers', default=workers))
+    decay = float(_argval('--decay', default=0.0005))
+    lr = float(_argval('--lr', default=0.001))
+    workdir = _argval('--workdir', default=ub.truepath('~/work/viame/yolo'))
     ovthresh = 0.5
 
     coco_dsets = load_coco_datasets()
@@ -1152,18 +1155,16 @@ def train():
     srun -c 4 -p priority --gres=gpu:1 \
             python ~/code/baseline-viame-2018/yolo_viame.py train \
             --nice baseline1 --batch_size=16 --workers=4 --gpu=0
-
-    srun -c 4 -p community --gres=gpu:1 \
-            python ~/code/baseline-viame-2018/yolo_viame.py train \
-            --nice dummy --batch_size=16 --limit=128 --workers=0 --gpu=0 --lr=0.000001
-
-    srun -c 4 -p community --gres=gpu:1 \
-            python ~/code/baseline-viame-2018/yolo_viame.py train \
-            --nice baseline1 --batch_size=16 --workers=0 --gpu=0
-
     """
     harn = setup_harness()
     harn.run()
+
+
+def predict():
+    """
+    Currently hacked in
+    """
+    pass
 
 
 if __name__ == '__main__':
