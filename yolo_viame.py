@@ -1156,7 +1156,7 @@ def train():
             python ~/code/baseline-viame-2018/yolo_viame.py train \
             --nice baseline1 --batch_size=16 --workers=4 --gpu=0
     """
-    harn = setup_harness()
+    harn = setup_harness(nice='baseline1', batch_size=16, workers=4)
     harn.run()
 
 
