@@ -30,6 +30,7 @@ tar xvzf $HOME/Downloads/phase0-annotations.tar.gz -C $DATA_DIR/viame-challenge-
 tar xvzf $HOME/Downloads/phase0-imagery.tar.gz -C $DATA_DIR/viame-challenge-2018
 
 tar xvzf data-challenge-training-imagery.tar.gz
+tar xvzf test_data.tar.gz
 ```
 
 ## Install the Detectron docker image.

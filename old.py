@@ -44,7 +44,7 @@ def show_low_support_classes(dset):
             fig.clf()
             dset.show_annotation(primary_aid, gid=gid)
             fig.canvas.draw()
-        except:
+        except Exception:
             print('cannot draw')
 
     # # import utool as ut
