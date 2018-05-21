@@ -1193,6 +1193,13 @@ def predict():
     predict_coco_dset = coco_api.CocoDataset(predict_coco_dataset, tag='predict')
     predict_dset = YoloCocoDataset(predict_coco_dset, train=False)
 
+    # HACK: Define the path to the model weights
+    # INSTEAD: best weights should be packaged in a model deployment
+    load_path = ub.truepath(
+        '~/work/viame/yolo/fit/nice/baseline1/best_snapshot.pt')
+    # load_path = ub.truepath(
+    #     '~/work/viame/yolo/fit/nice/baseline1/torch_snapshots/_epoch_00000080.pt')
+
     # HACK: Define the model topology (because we know what we trained with)
     # INSTEAD: model deployment should store and abstract away the topology
     model = light_yolo.Yolo(**{
@@ -1201,14 +1208,6 @@ def predict():
         'conf_thresh': 0.001,
         'nms_thresh': 0.5,
     })
-
-    # HACK: Define the path to the model weights
-    # INSTEAD: best weights should be packaged in a model deployment
-    load_path = ub.truepath(
-        '~/work/viame/yolo/fit/nice/baseline1/best_snapshot.pt')
-
-    load_path = ub.truepath(
-        '~/work/viame/yolo/fit/nice/baseline1/torch_snapshots/_epoch_00000080.pt')
 
     # Boilerplate code that could be abstracted away in a prediction harness
     xpu = nh.XPU.cast('auto')
