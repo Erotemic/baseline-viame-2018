@@ -1166,8 +1166,8 @@ def predict():
     Currently hacked in due to limited harness support.
 
     srun -c 4 -p priority --gres=gpu:1 \
-            python ~/code/baseline-viame-2018/yolo_viame.py train \
-            --nice baseline1 --batch_size=16 --workers=4 --gpu=0
+            python ~/code/baseline-viame-2018/yolo_viame.py predict \
+            --gpu=0
     """
 
     # HACK: Load the training dataset to extract the categories
@@ -1319,6 +1319,7 @@ if __name__ == '__main__':
         xdoctest ~/code/baseline-viame-2018/yolo_viame.py all
         python ~/code/baseline-viame-2018/yolo_viame.py all
     """
-    train()
+    # train()
+    predict()
     # import xdoctest
     # xdoctest.doctest_module(__file__)
