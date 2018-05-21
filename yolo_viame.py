@@ -1210,7 +1210,7 @@ def predict():
     })
 
     # Boilerplate code that could be abstracted away in a prediction harness
-    xpu = nh.XPU.cast('auto')
+    xpu = nh.XPU.cast('gpu')
     print('xpu = {!r}'.format(xpu))
     model = xpu.mount(model)
     snapshot_state = xpu.load(load_path)
