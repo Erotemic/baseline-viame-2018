@@ -1164,6 +1164,10 @@ def train():
 def predict():
     """
     Currently hacked in due to limited harness support.
+
+    srun -c 4 -p priority --gres=gpu:1 \
+            python ~/code/baseline-viame-2018/yolo_viame.py train \
+            --nice baseline1 --batch_size=16 --workers=4 --gpu=0
     """
 
     # HACK: Load the training dataset to extract the categories
@@ -1174,6 +1178,9 @@ def predict():
     # Create a dataset to iterate through the images to predict on
     test_gpaths = glob.glob(ub.truepath('~/data/noaa/test_data/*/*.png'))
     predict_coco_dataset = {
+        'licenses': [],
+        'info': [],
+        'categories': categories,
         'images': [
             {
                 'id': idx,
@@ -1182,9 +1189,6 @@ def predict():
             for idx, fpath in enumerate(test_gpaths)
         ],
         'annotations': [],
-        'licenses': [],
-        'info': [],
-        'categories': categories
     }
     predict_coco_dset = coco_api.CocoDataset(predict_coco_dataset, tag='predict')
     predict_dset = YoloCocoDataset(predict_coco_dset, train=False)
@@ -1207,13 +1211,14 @@ def predict():
         '~/work/viame/yolo/fit/nice/baseline1/torch_snapshots/_epoch_00000080.pt')
 
     # Boilerplate code that could be abstracted away in a prediction harness
-    xpu = nh.XPU.cast('cpu')
+    xpu = nh.XPU.cast('auto')
+    print('xpu = {!r}'.format(xpu))
     model = xpu.mount(model)
     snapshot_state = xpu.load(load_path)
     model.load_state_dict(snapshot_state['model_state_dict'])
 
-    batch_size = 1
-    workers = 0
+    batch_size = 16
+    workers = 4
     predict_loader = predict_dset.make_loader(batch_size=batch_size,
                                               num_workers=workers,
                                               shuffle=False, pin_memory=False)
@@ -1282,8 +1287,8 @@ def predict():
                             'score': score,
                         }
                         predictions.append(pred)
-            if bx > 1:
-                break
+            # if bx > 1:
+            #     break
 
     predict_coco_dset.dataset['annotations'] = predictions
     predict_coco_dset._build_index()
@@ -1291,11 +1296,10 @@ def predict():
     with open('./viame_pred_dump.mscoco.json') as file:
         predict_coco_dset.dump(file)
 
-    gids = set([a['image_id'] for a in predict_coco_dset.anns.values()])
-
     if False:
         import utool as ut
         from matplotlib import pyplot as plt
+        gids = set([a['image_id'] for a in predict_coco_dset.anns.values()])
         for gid in ut.InteractiveIter(list(gids)):
 
             try:
