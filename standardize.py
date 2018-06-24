@@ -4,9 +4,8 @@ Script for generating viame_wrangler/mappings.py
 from __future__ import absolute_import, division, print_function, unicode_literals
 from os.path import join, dirname
 import glob
-import os
 import ubelt as ub
-import coco_wrangler
+from fishnet.coco_api import CocoDataset
 import viame_wrangler
 
 DRAW = True
@@ -20,7 +19,7 @@ def read_raw_categories():
     fpaths = list(glob.glob(join(annot_dir, '*.json')))
 
     print('Reading')
-    dsets = [coco_wrangler.CocoDataset(fpath, autobuild=True)
+    dsets = [CocoDataset(fpath, autobuild=True)
              for fpath in fpaths]
 
     if 0:
@@ -31,7 +30,7 @@ def read_raw_categories():
             print(ub.repr2(dset.category_annotation_frequency()))
 
     print('Merging')
-    merged = coco_wrangler.CocoDataset.union(*dsets)
+    merged = CocoDataset.union(*dsets)
     merged.img_root = img_root
     # merged._run_fixes()
     # print(ub.repr2(merged.category_annotation_frequency()))

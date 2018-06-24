@@ -24,7 +24,7 @@ class StratifiedGroupKFold(_BaseKFold):
 
     CommandLine
     -----------
-    python -m xdoctest coco_wrangler.sklearn_helpers StratifiedGroupKFold
+    python -m xdoctest fishnet.utils.sklearn_helpers StratifiedGroupKFold
 
     Example
     -------
@@ -130,7 +130,7 @@ class StratifiedGroupKFold(_BaseKFold):
 if __name__ == '__main__':
     r"""
     CommandLine:
-        python -m coco_wrangler.sklearn_helpers
+        python -m fishnet.utils.sklearn_helpers
     """
     import xdoctest
     xdoctest.doctest_module(__file__)

@@ -3,6 +3,8 @@
 Extended MS-COCO API. Currently only supports keypoints and bounding boxes.
 
 Extends the format to also include line annotations.
+
+TODO: Use version ported to netharn? Or extend from it?
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 import warnings
@@ -385,7 +387,7 @@ class CocoDataset(ub.NiceRepr, CocoExtrasMixin):
         http://cocodataset.org/#download
 
     CommandLine:
-        python -m coco_wrangler.coco_api CocoDataset --show
+        python -m fishnet.coco_api CocoDataset --show
 
     Example:
         >>> dataset = demo_coco_data()
@@ -426,7 +428,7 @@ class CocoDataset(ub.NiceRepr, CocoExtrasMixin):
     def copy(self):
         """
         Example:
-            >>> from coco_wrangler.coco_api import *
+            >>> from fishnet.coco_api import *
             >>> dataset = demo_coco_data()
             >>> self = CocoDataset(dataset, tag='demo')
             >>> new = self.copy()
@@ -453,7 +455,7 @@ class CocoDataset(ub.NiceRepr, CocoExtrasMixin):
         Writes the dataset out to the json format
 
         Example:
-            >>> from coco_wrangler.coco_api import *
+            >>> from fishnet.coco_api import *
             >>> dataset = demo_coco_data()
             >>> self = CocoDataset(dataset, tag='demo')
             >>> text = self.dumps()
@@ -992,7 +994,7 @@ def demo_coco_data():
 if __name__ == '__main__':
     r"""
     CommandLine:
-        python -m coco_wrangler.coco_api all
+        python -m fishnet.coco_api all
     """
     import xdoctest
     xdoctest.doctest_module(__file__)

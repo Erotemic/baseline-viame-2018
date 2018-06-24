@@ -1,5 +1,5 @@
 import viame_wrangler
-from coco_wrangler import CocoDataset
+from fishnet.coco_api import CocoDataset
 import glob
 from os.path import join
 from os.path import os

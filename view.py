@@ -2,7 +2,7 @@ from os.path import join
 import os
 import ubelt as ub
 import viame_wrangler
-from coco_wrangler import CocoDataset
+from fishnet.coco_api import CocoDataset
 import glob
 
 
@@ -44,10 +44,10 @@ def read_fine_merged():
     cfg = viame_wrangler.config.WrangleConfig({
         # 'img_root': '~/data/viame-challenge-2018/phase0-imagery',
         # 'annots': '~/data/viame-challenge-2018/phase0-fine*keypoint*.json'
-        'img_root': '~/data/viame-challenge-2018/phase1-imagery',
-        'annots': '~/data/viame-challenge-2018/phase1-annotations/*/*fine*keypoint*.json'
-        # 'img_root': '/data/projects/noaa/phase1-imagery',
-        # 'annots': '/data/projects/noaa/phase1-annotations/*/*fine*-keypoint*',
+        # 'img_root': '~/data/viame-challenge-2018/phase1-imagery',
+        # 'annots': '~/data/viame-challenge-2018/phase1-annotations/*/*fine*keypoint*.json',
+        'img_root': '/data/projects/noaa/training_data/imagery',
+        'annots': '/data/projects/noaa/training_data/annotations/*/*fine*-keypoint*',
     })
     merged = _read(cfg)
     return merged
@@ -57,8 +57,10 @@ def read_coarse_merged():
     cfg = viame_wrangler.config.WrangleConfig({
         # 'img_root': '~/work/viame-challenge-2018/phase0-imagery',
         # 'annots': '~/work/viame-challenge-2018/phase0-fine*keypoint*.json'
-        'img_root': '~/data/viame-challenge-2018/phase1-imagery',
-        'annots': '~/data/viame-challenge-2018/phase1-annotations/*/*coarse*-keypoint*',
+        # 'img_root': '~/data/viame-challenge-2018/phase1-imagery',
+        # 'annots': '~/data/viame-challenge-2018/phase1-annotations/*/*coarse*-keypoint*',
+        'img_root': '/data/projects/noaa/training_data/imagery',
+        'annots': '/data/projects/noaa/training_data/annotations/*/*fine*-keypoint*',
     })
     merged = _read(cfg)
     return merged

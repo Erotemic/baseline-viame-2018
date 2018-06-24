@@ -39,8 +39,9 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from os.path import join
 import glob
 import ubelt as ub
-from coco_wrangler import CocoDataset, StratifiedGroupKFold
-import viame_wrangler
+from fishnet.coco_api import CocoDataset
+from fishnet.util import StratifiedGroupKFold
+from fishnet import viame_wrangler
 import viame_wrangler.mappings
 
 
@@ -213,14 +214,14 @@ def make_train_vali(merged):
     return train_dset, vali_dset
 
 
-def setup_yolo(cfg=None):
+def setup_data_splits(cfg=None):
     """
     CommandLine:
-        python ~/code/baseline-viame-2018/wrangle.py setup_yolo \
+        python ~/code/baseline-viame-2018/wrangle.py setup_data_splits \
             --annots=$HOME/data/viame-challenge-2018/phase1-annotations \
             --workdir=$HOME/work/viame-challenge-2018
 
-        python ~/code/baseline-viame-2018/wrangle.py setup_yolo \
+        python ~/code/baseline-viame-2018/wrangle.py setup_data_splits \
             --annots=/data/projects/noaa/phase1-annotations/*/*coarse-bbox-only*.json \
             --img_root=/data/projects/noaa/phase1-imagery \
             --workdir=$HOME/work/viame-challenge-2018
